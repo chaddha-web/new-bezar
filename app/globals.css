@@ -3,7 +3,7 @@
    Nike-inspired: photography speaks, the chrome doesn't.
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=Montserrat:wght@700;800&display=swap');
 
 /* ── DESIGN TOKENS ── */
 :root {
@@ -128,9 +128,10 @@ img, video { display: block; max-width: 100%; }
 }
 
 .nav-brand {
-  font-family: var(--font-display);
-  font-size: 32px;
-  letter-spacing: 2px;
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 800;
+  font-size: 24px;
+  letter-spacing: 4px;
   color: var(--ink);
   text-transform: uppercase;
   line-height: 1;
@@ -1072,7 +1073,7 @@ img, video { display: block; max-width: 100%; }
   .utility-bar { display: none; }
 
   .primary-nav { height: 56px; }
-  .nav-brand { font-size: 24px; }
+  .nav-brand { font-size: 20px; }
   .search-pill { display: none; }
 
   .mobile-drawer { top: 56px; height: calc(100vh - 56px); }
