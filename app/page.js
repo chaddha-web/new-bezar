@@ -437,9 +437,9 @@ export default function Home() {
           {videoOverlay && videoError ? (
             <div className="video-error-container">
               <IconAlertTriangle />
-              <h3 className="video-error-title">Network Error</h3>
+              <h3 className="video-error-title">Coming Soon</h3>
               <p className="video-error-message">
-                The video trailer for <strong>&ldquo;{videoOverlay.title}&rdquo;</strong> could not be loaded. Please check your network connection or try again later.
+                Bezar is coming soon. The trailer for <strong>&ldquo;{videoOverlay.title}&rdquo;</strong> is currently offline or could not be loaded due to a network error.
               </p>
             </div>
           ) : (
