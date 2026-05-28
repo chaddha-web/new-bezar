@@ -2,12 +2,30 @@ import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NextResponse } from "next/server";
 
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Range, Authorization",
+      "Access-Control-Max-Age": "86400",
+    },
+  });
+}
+
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const filename = searchParams.get("filename");
 
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Range, Authorization",
+  };
+
   if (!filename) {
-    return NextResponse.json({ error: "Missing filename parameter" }, { status: 400 });
+    return NextResponse.json({ error: "Missing filename parameter" }, { status: 400, headers: corsHeaders });
   }
 
   const bucketName = "bucket-d4d96s";
@@ -31,14 +49,14 @@ export async function GET(request) {
 
       // URL expires in 1 hour (3600 seconds)
       const signedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
-      return NextResponse.json({ url: signedUrl, source: "s3-presigned" });
+      return NextResponse.json({ url: signedUrl, source: "s3-presigned" }, { headers: corsHeaders });
     } catch (error) {
       console.error("Error generating pre-signed S3 URL:", error);
       // Fallback if signing fails
-      return NextResponse.json({ url: fallbackUrl, source: "fallback-error" });
+      return NextResponse.json({ url: fallbackUrl, source: "fallback-error" }, { headers: corsHeaders });
     }
   }
 
   // Fallback to direct public S3 URL
-  return NextResponse.json({ url: fallbackUrl, source: "fallback-public" });
+  return NextResponse.json({ url: fallbackUrl, source: "fallback-public" }, { headers: corsHeaders });
 }
