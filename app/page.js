@@ -64,6 +64,45 @@ const MOVIES = [
   },
 ];
 
+const LIVE_CHANNELS = [
+  {
+    id: "india-daily-live",
+    title: "India Daily Live",
+    genre: "Hindi News",
+    badge: "LIVE",
+    logo: "https://jiotvimages.cdn.jio.com/dare_images/images/India_Daily_24x7.png",
+    videoSrc: "https://indiadaily.ottlive.co.in/indiadailylive/index.m3u8",
+    description: "Breaking news, headlines, and live coverage 24/7.",
+  },
+  {
+    id: "aaj-tak",
+    title: "Aaj Tak HD",
+    genre: "Hindi News",
+    badge: "LIVE",
+    logo: "https://jiotvimages.cdn.jio.com/dare_images/images/Aaj_Tak.png",
+    videoSrc: "https://feeds.intoday.in/aajtak/api/aajtakhd/master.m3u8",
+    description: "India's #1 Hindi news channel — live, 24/7.",
+  },
+  {
+    id: "abp-news",
+    title: "ABP News",
+    genre: "Hindi News",
+    badge: "LIVE",
+    logo: "https://jiotvimages.cdn.jio.com/dare_images/images/ABP_News.png",
+    videoSrc: "https://d2l4ar6y3mrs4k.cloudfront.net/live-streaming/abpnews-livetv/master.m3u8",
+    description: "Breaking news, politics, and analysis live from ABP.",
+  },
+  {
+    id: "india-tv",
+    title: "India TV",
+    genre: "Hindi News",
+    badge: "LIVE",
+    logo: "https://xstreamcp-assets-msp.streamready.in/assets/LIVETV/LIVECHANNEL/LIVETV_LIVETVCHANNEL_INDIA_TV/images/LOGO_HD/image.png",
+    videoSrc: "https://pl-indiatvnews.akamaized.net/out/v1/db79179b608641ceaa5a4d0dd0dca8da/index.m3u8",
+    description: "India TV — Sach Dikhata Hai. Live round-the-clock.",
+  },
+];
+
 /* ────────── SVG ICONS (inline) ────────── */
 const IconSearch = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -104,6 +143,7 @@ export default function Home() {
   const [heroIndex, setHeroIndex] = useState(0);
   const [videoError, setVideoError] = useState(false);
   const videoRef = useRef(null);
+  const hlsRef = useRef(null);
 
   /* ── Auto-rotate hero banner every 5 seconds ── */
   useEffect(() => {
@@ -172,14 +212,63 @@ export default function Home() {
 
   useEffect(() => {
     if (videoOverlay && videoRef.current) {
-      videoRef.current.load();
-      videoRef.current.play().catch(() => {});
+      const video = videoRef.current;
+      const isM3U8 = videoOverlay.videoSrc.endsWith(".m3u8") || videoOverlay.videoSrc.includes("m3u8") || videoOverlay.videoSrc.includes(".m3u");
+
+      if (isM3U8) {
+        import("hls.js").then((HlsModule) => {
+          const Hls = HlsModule.default;
+          if (Hls.isSupported()) {
+            const hls = new Hls({
+              enableWorker: true,
+              lowLatencyMode: true,
+            });
+            hls.loadSource(videoOverlay.videoSrc);
+            hls.attachMedia(video);
+            hlsRef.current = hls;
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+              video.play().catch(() => {});
+            });
+            hls.on(Hls.Events.ERROR, (event, data) => {
+              console.error("HLS error:", data);
+              if (data.fatal) {
+                setVideoError(true);
+              }
+            });
+          } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+            // Native Safari HLS support
+            video.src = videoOverlay.videoSrc;
+            video.addEventListener("loadedmetadata", () => {
+              video.play().catch(() => {});
+            });
+          } else {
+            setVideoError(true);
+          }
+        });
+      } else {
+        // Regular video (MP4)
+        video.src = videoOverlay.videoSrc;
+        video.load();
+        video.play().catch(() => {});
+      }
     }
+
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
   }, [videoOverlay]);
 
   const closeVideo = useCallback(() => {
     if (videoRef.current) {
       videoRef.current.pause();
+      videoRef.current.src = "";
+    }
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
     }
     setVideoOverlay(null);
     setVideoError(false);
@@ -236,6 +325,7 @@ export default function Home() {
 
         <div className="nav-links">
           <a href="#" className="active">Home</a>
+          <a href="#live-news">Live News</a>
           <a href="#">Movies</a>
           <a href="#">Series</a>
           <a href="#">Sports</a>
@@ -259,6 +349,7 @@ export default function Home() {
       {/* ═══════ MOBILE DRAWER ═══════ */}
       <div className={`mobile-drawer ${drawerOpen ? "open" : ""}`}>
         <a href="#" onClick={() => setDrawerOpen(false)}>Home</a>
+        <a href="#live-news" onClick={() => setDrawerOpen(false)}>Live News</a>
         <a href="#" onClick={() => setDrawerOpen(false)}>Movies</a>
         <a href="#" onClick={() => setDrawerOpen(false)}>Series</a>
         <a href="#" onClick={() => setDrawerOpen(false)}>Sports</a>
@@ -325,6 +416,44 @@ export default function Home() {
               onClick={() => setHeroIndex(idx)}
               aria-label={`Slide ${idx + 1}`}
             />
+          ))}
+        </div>
+      </section>
+
+      {/* ═══════ LIVE NEWS GRID ═══════ */}
+      <section className="section" id="live-news">
+        <div className="section-header">
+          <h2 className="section-title">Live News</h2>
+          <span className="section-count">{LIVE_CHANNELS.length} Channels</span>
+        </div>
+
+        <div className="card-grid">
+          {LIVE_CHANNELS.map((channel) => (
+            <div className="movie-card" key={channel.id} id={`card-${channel.id}`}>
+              <div
+                className="movie-card-image"
+                onClick={() => openVideo(channel)}
+                style={{ background: "#0f0f0f", display: "flex", alignItems: "center", justifyContent: "center" }}
+              >
+                <img
+                  src={channel.logo}
+                  alt={channel.title}
+                  loading="lazy"
+                  style={{ maxWidth: "70%", maxHeight: "70%", objectFit: "contain" }}
+                />
+                <div className="card-overlay" />
+                <div className="play-btn">
+                  <IconPlay />
+                </div>
+                <span className="badge-promo" style={{ background: "#e50914", color: "#fff" }}>
+                  {channel.badge}
+                </span>
+              </div>
+              <div className="movie-card-meta">
+                <p className="movie-card-title">{channel.title}</p>
+                <p className="movie-card-genre">{channel.genre}</p>
+              </div>
+            </div>
           ))}
         </div>
       </section>
