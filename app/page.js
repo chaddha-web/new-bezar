@@ -17,7 +17,7 @@ const MOVIES = [
     year: "2026",
     badge: "Coming Soon",
     thumbnail: "/thumbnails/welcome-to-the-jungle.jpg",
-    videoSrc: `${VIDEO_BUCKET}/welcome-to-the-jungle.mp4`,
+    videoSrc: `${VIDEO_BUCKET}/Welcome%20To%20The%20Jungle%20-%20Official%20Teaser%20%20In%20Cinemas%20%2026th%20June%202026%20-%20Star%20Studios%20(1080p,%20h264).mp4`,
     featured: true,
     description:
       "The wildest adventure of the year — arriving June 26, 2026.",
@@ -29,7 +29,7 @@ const MOVIES = [
     year: "2016",
     badge: "Just In",
     thumbnail: "/thumbnails/dangal.jpg",
-    videoSrc: `${VIDEO_BUCKET}/dangal.mp4`,
+    videoSrc: `${VIDEO_BUCKET}/Dangal%20%20Official%20Trailer%20%20Aamir%20Khan%20%20In%20Cinemas%20Dec%2023,%202016%20-%20UTV%20Motion%20Pictures%20(1080p,%20h264).mp4`,
     description: "A father's dream. A daughter's destiny.",
   },
   {
@@ -39,7 +39,7 @@ const MOVIES = [
     year: "2025",
     badge: "Coming Soon",
     thumbnail: "/thumbnails/disclosure-day.jpg",
-    videoSrc: `${VIDEO_BUCKET}/disclosure-day.mp4`,
+    videoSrc: `${VIDEO_BUCKET}/Disclosure%20Day%20%20Final%20Trailer%20-%20Universal%20Pictures%20(1080p,%20h264).mp4`,
     description: "The truth was never meant to be found.",
   },
   {
@@ -49,7 +49,7 @@ const MOVIES = [
     year: "2025",
     badge: "Coming Soon",
     thumbnail: "/thumbnails/governor.jpg",
-    videoSrc: `${VIDEO_BUCKET}/governor.mp4`,
+    videoSrc: `${VIDEO_BUCKET}/GOVERNOR%20%20Official%20Trailer%20%20Manoj%20Bajpayee%20%20Vipul%20Amrutlal%20Shah%20Chinmay%20Mandlekar%20Aashin%20A%20Shah%20-%20Sunshine%20Pictures%20(1080p,%20h264).mp4`,
     description: "Power has a price. Every seat costs a soul.",
   },
   {
@@ -59,7 +59,7 @@ const MOVIES = [
     year: "2019",
     badge: "Just In",
     thumbnail: "/thumbnails/gully-boy.jpg",
-    videoSrc: `${VIDEO_BUCKET}/gully-boy.mp4`,
+    videoSrc: `${VIDEO_BUCKET}/Gully%20Boy%20%20Official%20Trailer%20%20Ranveer%20Singh%20%20Alia%20Bhatt%20%20Zoya%20Akhtar%2014th%20February%20-%20Excel%20Movies%20(1080p,%20h264).mp4`,
     description: "From the streets to the stage.",
   },
 ];
@@ -92,30 +92,7 @@ export default function Home() {
   const [videoOverlay, setVideoOverlay] = useState(null);
   const [notifyModal, setNotifyModal] = useState(null);
   const [search, setSearch] = useState("");
-  const [videoUrls, setVideoUrls] = useState({});
   const videoRef = useRef(null);
-
-  /* ── Fetch signed URLs on mount ── */
-  useEffect(() => {
-    const fetchSignedUrls = async () => {
-      const urls = {};
-      await Promise.all(
-        MOVIES.map(async (m) => {
-          try {
-            const filename = m.videoSrc.split("/").pop();
-            const res = await fetch(`/api/video-url?filename=${encodeURIComponent(filename)}`);
-            const data = await res.json();
-            urls[m.id] = data.url;
-          } catch (err) {
-            console.error("Failed to load signed URL for:", m.title, err);
-            urls[m.id] = m.videoSrc; // fallback to public URL
-          }
-        })
-      );
-      setVideoUrls(urls);
-    };
-    fetchSignedUrls();
-  }, []);
 
   /* ── Filter movies by search ── */
   const filteredMovies = MOVIES.filter(
@@ -143,37 +120,29 @@ export default function Home() {
     return () => observer.disconnect();
   }, [filteredMovies]);
 
-  /* ── Register Service Worker for video caching ── */
+  /* ── Preload first few seconds of each video using hidden <video> elements ── */
+  /* This avoids CORS issues since <video> tags don't require CORS headers */
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
-    }
-  }, []);
-
-  /* ── Preload first ~2MB of each video (5-10s buffer) ── */
-  useEffect(() => {
-    if (Object.keys(videoUrls).length === 0) return;
-    const preloadVideo = async (url, delay) => {
-      await new Promise((r) => setTimeout(r, delay));
-      try {
-        const res = await fetch(url, {
-          headers: { Range: "bytes=0-2097151" },
-          mode: "cors",
-        });
-        // Read and discard — the SW or browser cache now holds it
-        if (res.ok || res.status === 206) await res.blob();
-      } catch {
-        // silent fail — non-critical preload
-      }
-    };
-    // Stagger preloads so we don't hammer the connection
+    const preloaders = [];
     MOVIES.forEach((m, i) => {
-      const url = videoUrls[m.id];
-      if (url) {
-        preloadVideo(url, i * 1500);
-      }
+      setTimeout(() => {
+        const v = document.createElement("video");
+        v.preload = "auto";
+        v.muted = true;
+        v.playsInline = true;
+        v.style.display = "none";
+        v.src = m.videoSrc;
+        document.body.appendChild(v);
+        preloaders.push(v);
+      }, i * 1500);
     });
-  }, [videoUrls]);
+    return () => {
+      preloaders.forEach((v) => {
+        v.src = "";
+        v.remove();
+      });
+    };
+  }, []);
 
   /* ── Video overlay controls ── */
   const openVideo = useCallback((movie) => {
@@ -416,7 +385,7 @@ export default function Home() {
               playsInline
               preload="auto"
             >
-              <source src={videoUrls[videoOverlay.id] || videoOverlay.videoSrc} type="video/mp4" />
+              <source src={videoOverlay.videoSrc} type="video/mp4" />
             </video>
           )}
           {videoOverlay && (
