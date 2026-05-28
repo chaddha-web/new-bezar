@@ -92,7 +92,30 @@ export default function Home() {
   const [videoOverlay, setVideoOverlay] = useState(null);
   const [notifyModal, setNotifyModal] = useState(null);
   const [search, setSearch] = useState("");
+  const [videoUrls, setVideoUrls] = useState({});
   const videoRef = useRef(null);
+
+  /* ── Fetch signed URLs on mount ── */
+  useEffect(() => {
+    const fetchSignedUrls = async () => {
+      const urls = {};
+      await Promise.all(
+        MOVIES.map(async (m) => {
+          try {
+            const filename = m.videoSrc.split("/").pop();
+            const res = await fetch(`/api/video-url?filename=${encodeURIComponent(filename)}`);
+            const data = await res.json();
+            urls[m.id] = data.url;
+          } catch (err) {
+            console.error("Failed to load signed URL for:", m.title, err);
+            urls[m.id] = m.videoSrc; // fallback to public URL
+          }
+        })
+      );
+      setVideoUrls(urls);
+    };
+    fetchSignedUrls();
+  }, []);
 
   /* ── Filter movies by search ── */
   const filteredMovies = MOVIES.filter(
@@ -129,6 +152,7 @@ export default function Home() {
 
   /* ── Preload first ~2MB of each video (5-10s buffer) ── */
   useEffect(() => {
+    if (Object.keys(videoUrls).length === 0) return;
     const preloadVideo = async (url, delay) => {
       await new Promise((r) => setTimeout(r, delay));
       try {
@@ -143,8 +167,13 @@ export default function Home() {
       }
     };
     // Stagger preloads so we don't hammer the connection
-    MOVIES.forEach((m, i) => preloadVideo(m.videoSrc, i * 1500));
-  }, []);
+    MOVIES.forEach((m, i) => {
+      const url = videoUrls[m.id];
+      if (url) {
+        preloadVideo(url, i * 1500);
+      }
+    });
+  }, [videoUrls]);
 
   /* ── Video overlay controls ── */
   const openVideo = useCallback((movie) => {
@@ -387,7 +416,7 @@ export default function Home() {
               playsInline
               preload="auto"
             >
-              <source src={videoOverlay.videoSrc} type="video/mp4" />
+              <source src={videoUrls[videoOverlay.id] || videoOverlay.videoSrc} type="video/mp4" />
             </video>
           )}
           {videoOverlay && (
