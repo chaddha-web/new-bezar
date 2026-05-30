@@ -544,7 +544,9 @@ export default function Home() {
           </div>
         </div>
         <div className="footer-bottom">
-          <span className="footer-copy">© 2026 Bezar Entertainment Pvt. Ltd. All rights reserved.</span>
+          <span className="footer-copy">
+            © 2026 Bezar Entertainment Pvt. Ltd. All rights reserved. · Owned &amp; operated by <strong>H.R. Moorti Crations</strong>
+          </span>
           <div className="footer-legal">
             <a href="#">Terms</a>
             <a href="#">Privacy</a>
