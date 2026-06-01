@@ -105,5 +105,44 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO movies (id, title, genre, year, badge, thumbnail, video_src, description, is_featured)
 VALUES
 ('e34d3ebb-78a2-4ff1-b151-ba7ad4442305', 'Gully Boy', 'Drama · Music', '2019', 'Coming Soon', '/thumbnails/gully-boy.jpg', 'https://bucket-d4d96s.s3.us-east-1.amazonaws.com/Gully%20Boy%20%20Official%20Trailer%20%20Ranveer%20Singh%20%20Alia%20Bhatt%20%20Zoya%20Akhtar%2014th%20February%20-%20Excel%20Movies%20(1080p,%20h264).mp4', 'From the streets to the stage.', FALSE)
-ON CONFLICT (id) DO NOTHING;
+
+-- 9. Create MLM Nodes Table
+CREATE TABLE IF NOT EXISTS mlm_nodes (
+    node_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    parent_id UUID REFERENCES users(id) ON DELETE SET NULL, -- Immediate sponsor/upline
+    investment_amount_inr DECIMAL(15, 2) DEFAULT 9400.00,
+    accumulated_earnings_inr DECIMAL(15, 2) DEFAULT 0.00,
+    wallet_balance_inr DECIMAL(15, 2) DEFAULT 0.00,
+    node_status VARCHAR(50) DEFAULT 'ACTIVE', -- 'PENDING', 'ACTIVE', 'EXPIRED'
+    accelerator_mode VARCHAR(50) DEFAULT 'STANDARD', -- 'STANDARD', 'FAST_FORWARD'
+    current_rank VARCHAR(20) DEFAULT 'R1', -- 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 10. Create Daily Engagement Telemetry Trackers
+CREATE TABLE IF NOT EXISTS daily_engagement (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    date DATE DEFAULT CURRENT_DATE,
+    audio_duration_seconds INT DEFAULT 0,
+    video_completed BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, date)
+);
+
+-- 11. Create Core Wallet Ledger System
+CREATE TABLE IF NOT EXISTS wallet_ledger (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    node_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    amount DECIMAL(15, 2) NOT NULL,
+    transaction_type VARCHAR(100) NOT NULL, -- 'YIELD', 'DIRECT_REFERRAL', 'MATCHING_COMMISSION', 'PEER_MATCH_OVERRIDE', 'WITHDRAWAL'
+    reference_node_id UUID REFERENCES users(id) ON DELETE SET NULL, -- The downstream node generating the commission
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexing for high-speed unilevel hierarchy lookups
+CREATE INDEX IF NOT EXISTS idx_mlm_nodes_parent ON mlm_nodes(parent_id);
+CREATE INDEX IF NOT EXISTS idx_wallet_ledger_node ON wallet_ledger(node_id);
+CREATE INDEX IF NOT EXISTS idx_daily_engagement_user_date ON daily_engagement(user_id, date);
 
