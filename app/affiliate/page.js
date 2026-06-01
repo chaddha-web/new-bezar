@@ -9,6 +9,7 @@ export default function AffiliateDashboard() {
   
   // Withdrawal Form State
   const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawCurrency, setWithdrawCurrency] = useState('INR'); // 'INR' or 'USD'
   const [withdrawError, setWithdrawError] = useState('');
   const [withdrawSuccess, setWithdrawSuccess] = useState('');
   const [processing, setProcessing] = useState(false);
@@ -22,13 +23,15 @@ export default function AffiliateDashboard() {
 
   const fetchAffiliateDetails = async () => {
     try {
-      // Setup dynamic MLM profile data (mocked client fallback if not registered yet)
-      const detailsRes = await fetch(`/api/movies`); // Query dummy to check network is alive
+      // Query mock client values supporting the dual-currency parameters
+      const detailsRes = await fetch(`/api/movies`);
       
-      // Seed fallback values to display MLM dashboard UI instantly
       setNode({
+        investment_amount_usd: 100.00,
         investment_amount_inr: 9400.00,
+        accumulated_earnings_usd: 50.00,
         accumulated_earnings_inr: 4700.00,
+        wallet_balance_usd: 50.00,
         wallet_balance_inr: 4700.00,
         node_status: 'ACTIVE',
         accelerator_mode: 'STANDARD',
@@ -36,9 +39,9 @@ export default function AffiliateDashboard() {
       });
 
       setLedger([
-        { id: '1', transaction_type: 'YIELD', amount: 75.20, created_at: new Date().toISOString(), description: 'Daily passive yield (0.8%)' },
-        { id: '2', transaction_type: 'DIRECT_REFERRAL', amount: 470.00, created_at: new Date().toISOString(), description: 'Direct referral fee' },
-        { id: '3', transaction_type: 'MATCHING_COMMISSION', amount: 188.00, created_at: new Date().toISOString(), description: 'R2 upline delta match' }
+        { id: '1', transaction_type: 'YIELD', amount_usd: 0.80, amount_inr: 75.20, created_at: new Date().toISOString(), description: 'Daily passive yield (0.8%)' },
+        { id: '2', transaction_type: 'DIRECT_REFERRAL', amount_usd: 5.00, amount_inr: 470.00, created_at: new Date().toISOString(), description: 'Direct referral commission fee (5%)' },
+        { id: '3', transaction_type: 'MATCHING_COMMISSION', amount_usd: 2.00, amount_inr: 188.00, created_at: new Date().toISOString(), description: 'R2 upline delta match' }
       ]);
     } catch (err) {
       console.error(err);
@@ -54,39 +57,56 @@ export default function AffiliateDashboard() {
     
     const amount = Number(withdrawAmount);
 
-    if (amount < 2350) {
-      setWithdrawError('Minimum withdrawal threshold is ₹2,350 INR.');
-      return;
-    }
-
-    if (amount % 2350 !== 0) {
-      setWithdrawError('Withdrawals are restricted exclusively to absolute increments of ₹2,350 INR.');
-      return;
+    if (withdrawCurrency === 'INR') {
+      if (amount < 2350) {
+        setWithdrawError('Minimum authorized threshold is ₹2,350 INR.');
+        return;
+      }
+      if (amount % 2350 !== 0) {
+        setWithdrawError('Withdrawals are restricted exclusively to absolute increments of ₹2,350 INR.');
+        return;
+      }
+    } else {
+      // USD boundary checks
+      if (amount < 25) {
+        setWithdrawError('Minimum authorized threshold is $25 USD.');
+        return;
+      }
+      if (amount % 25 !== 0) {
+        setWithdrawError('Withdrawals are restricted exclusively to absolute increments of $25 USD.');
+        return;
+      }
     }
 
     setProcessing(true);
 
     try {
+      // Convert target value to INR to process in database pipeline
+      const finalInrAmount = withdrawCurrency === 'INR' ? amount : amount * 94;
+
       const res = await fetch('/api/wallet/withdraw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: mockUserId, amount })
+        body: JSON.stringify({ userId: mockUserId, amount: finalInrAmount })
       });
 
       const data = await res.json();
       if (res.ok && data.success) {
-        setWithdrawSuccess(`Authorized! Successfully withdrew ₹${data.withdrawn} INR.`);
+        setWithdrawSuccess(`Authorized! Successfully withdrew $${(data.withdrawn / 94).toFixed(2)} USD / ₹${data.withdrawn} INR.`);
         setWithdrawAmount('');
-        // Adjust client balances dynamically
+        
         setNode(prev => ({
           ...prev,
+          wallet_balance_usd: Number(prev.wallet_balance_usd) - (data.withdrawn / 94),
           wallet_balance_inr: Number(prev.wallet_balance_inr) - data.withdrawn
         }));
+
         setLedger(prev => [
           {
             id: Date.now().toString(),
             transaction_type: 'WITHDRAWAL',
-            amount: -data.withdrawn,
+            amount_usd: -(data.withdrawn / 94),
+            amount_inr: -data.withdrawn,
             created_at: new Date().toISOString(),
             description: `Outbound payout authorized`
           },
@@ -106,8 +126,8 @@ export default function AffiliateDashboard() {
     return <div className="affiliate-loading">Connecting to Wallet Engine...</div>;
   }
 
-  const maxCap = Number(node?.investment_amount_inr || 9400) * 2.5;
-  const progressPercent = Math.min(((Number(node?.accumulated_earnings_inr || 0) / maxCap) * 100), 100);
+  const maxCapUsd = Number(node?.investment_amount_usd || 100) * 2.5;
+  const progressPercent = Math.min(((Number(node?.accumulated_earnings_usd || 0) / maxCapUsd) * 100), 100);
 
   return (
     <main className="affiliate-layout">
@@ -126,15 +146,23 @@ export default function AffiliateDashboard() {
         </div>
         <div className="metric-box">
           <h4>Earnings Ceiling (2.5x Cap)</h4>
-          <h2>₹{node?.accumulated_earnings_inr} <span className="cap-label">/ ₹{maxCap}</span></h2>
+          <h2>
+            ${node?.accumulated_earnings_usd} <span className="cap-label">/ ${maxCapUsd} USD</span>
+            <div style={{ fontSize: '14px', color: '#a1a1aa', marginTop: '4px' }}>
+              ₹{node?.accumulated_earnings_inr} / ₹{maxCapUsd * 94} INR
+            </div>
+          </h2>
           <div className="progress-track">
             <div className="progress-fill" style={{ width: `${progressPercent}%` }}></div>
           </div>
         </div>
         <div className="metric-box highlighted-box">
           <h4>Available Wallet Balance</h4>
-          <h2>₹{node?.wallet_balance_inr}</h2>
-          <p>Residual Floats Retained</p>
+          <h2>${Number(node?.wallet_balance_usd).toFixed(2)} USD</h2>
+          <div style={{ fontSize: '15px', color: '#a1a1aa', fontWeight: '600', marginTop: '4px' }}>
+            ₹{node?.wallet_balance_inr} INR
+          </div>
+          <p style={{ marginTop: '10px' }}>Residual Floats Retained</p>
         </div>
       </section>
 
@@ -150,15 +178,43 @@ export default function AffiliateDashboard() {
             {withdrawSuccess && <div className="alert alert-success">{withdrawSuccess}</div>}
 
             <div className="form-group">
-              <label>Withdrawal Amount (INR)</label>
+              <label>Select Currency</label>
+              <select 
+                value={withdrawCurrency} 
+                onChange={(e) => {
+                  setWithdrawCurrency(e.target.value);
+                  setWithdrawAmount('');
+                  setWithdrawError('');
+                }}
+                style={{
+                  background: 'rgba(0, 0, 0, 0.4)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  color: '#fff',
+                  fontSize: '14px',
+                  marginBottom: '10px'
+                }}
+              >
+                <option value="INR">Indian Rupee (INR - ₹)</option>
+                <option value="USD">US Dollar (USD - $)</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Withdrawal Amount</label>
               <input
                 type="number"
                 required
                 value={withdrawAmount}
                 onChange={(e) => setWithdrawAmount(e.target.value)}
-                placeholder="Must be multiples of ₹2,350"
+                placeholder={withdrawCurrency === 'INR' ? "Must be multiples of ₹2,350" : "Must be multiples of $25"}
               />
-              <span className="step-hint">Increments: ₹2,350 · ₹4,700 · ₹7,050 · ₹9,400 etc.</span>
+              <span className="step-hint">
+                {withdrawCurrency === 'INR' 
+                  ? "Increments: ₹2,350 · ₹4,700 · ₹7,050 · ₹9,400 etc." 
+                  : "Increments: $25 · $50 · $75 · $100 etc."}
+              </span>
             </div>
 
             <button type="submit" disabled={processing} className="withdraw-submit-btn">
@@ -177,7 +233,8 @@ export default function AffiliateDashboard() {
               <thead>
                 <tr>
                   <th>Type</th>
-                  <th>Amount</th>
+                  <th>Amount (USD)</th>
+                  <th>Amount (INR)</th>
                   <th>Description</th>
                   <th>Date</th>
                 </tr>
@@ -190,8 +247,11 @@ export default function AffiliateDashboard() {
                         {l.transaction_type}
                       </span>
                     </td>
-                    <td className={l.amount < 0 ? 'negative-amt' : 'positive-amt'}>
-                      {l.amount < 0 ? '-' : '+'}₹{Math.abs(Number(l.amount)).toFixed(2)}
+                    <td className={l.amount_usd < 0 ? 'negative-amt' : 'positive-amt'}>
+                      {l.amount_usd < 0 ? '-' : '+'}${(Math.abs(Number(l.amount_usd))).toFixed(2)}
+                    </td>
+                    <td className={l.amount_inr < 0 ? 'negative-amt' : 'positive-amt'}>
+                      {l.amount_inr < 0 ? '-' : '+'}₹{Math.abs(Number(l.amount_inr)).toFixed(2)}
                     </td>
                     <td className="desc-td">{l.description}</td>
                     <td className="date-td">{new Date(l.created_at).toLocaleDateString()}</td>

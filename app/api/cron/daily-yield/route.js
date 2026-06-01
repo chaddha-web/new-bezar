@@ -12,7 +12,7 @@ export async function POST(request) {
 
     // 2. Fetch all active MLM Nodes
     const activeNodesRes = await query(
-      `SELECT node_id, investment_amount_inr, accelerator_mode, node_status 
+      `SELECT node_id, investment_amount_usd, accelerator_mode, node_status 
        FROM mlm_nodes 
        WHERE node_status = 'ACTIVE'`
     );
@@ -21,15 +21,15 @@ export async function POST(request) {
 
     for (const node of activeNodesRes.rows) {
       const userId = node.node_id;
-      const investment = Number(node.investment_amount_inr);
+      const investmentUsd = Number(node.investment_amount_usd);
       const isFastForward = node.accelerator_mode === 'FAST_FORWARD';
 
       // 3. Dynamic Fast Forward Auto-Upgrade Verification
       // Upgrade immediately if >= 3 direct frontline child nodes have >= investment than parent
       const upgradeRes = await query(
         `SELECT COUNT(*) FROM mlm_nodes 
-         WHERE parent_id = $1 AND investment_amount_inr >= $2 AND node_status = 'ACTIVE'`,
-        [userId, investment]
+         WHERE parent_id = $1 AND investment_amount_usd >= $2 AND node_status = 'ACTIVE'`,
+        [userId, investmentUsd]
       );
 
       const activeReferrals = Number(upgradeRes.rows[0].count);
@@ -60,7 +60,7 @@ export async function POST(request) {
         videoCompleted = telemetryRes.rows[0].video_completed;
       }
 
-      // 5. Evaluate Yield Percentage Criteria
+      // 5. Evaluate Yield Percentage Criteria (funnel yield constraints)
       let yieldPercentage = 0.0;
 
       if (activeAccelerator === 'FAST_FORWARD') {
@@ -82,24 +82,24 @@ export async function POST(request) {
         }
       }
 
-      const yieldPayout = investment * yieldPercentage;
+      const yieldPayoutUsd = investmentUsd * yieldPercentage;
 
-      if (yieldPayout > 0) {
-        // 6. Execute Personal Wallet Credit with capping loops
+      if (yieldPayoutUsd > 0) {
+        // 6. Execute Personal Wallet Credit with capping loops (Dual-Currency)
         const creditRes = await executeLedgerCredit({
           nodeId: userId,
-          amount: yieldPayout,
+          amountUsd: yieldPayoutUsd,
           type: 'YIELD',
           description: `Daily passive behavior yield at ${(yieldPercentage * 100).toFixed(1)}%`
         });
 
         // 7. Calculate and distribute differential upline matching delta commissions
         if (creditRes.success) {
-          await processDifferentialMatching(userId, yieldPayout);
+          await processDifferentialMatching(userId, yieldPayoutUsd);
           results.push({
             userId,
-            investment,
-            yieldPayout,
+            investmentUsd,
+            yieldPayoutUsd,
             percentage: yieldPercentage,
             status: 'PROCESSED'
           });
