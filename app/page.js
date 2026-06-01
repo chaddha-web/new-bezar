@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
+import CinematicPlayer from "@/components/CinematicPlayer";
 
 /* ────────────────────────────────────────────
    VIDEO / MOVIE DATA
@@ -145,23 +147,76 @@ export default function Home() {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
 
+  // OTT Platform State variables
+  const [user, setUser] = useState(null);
+  const [moviesList, setMoviesList] = useState(MOVIES);
+  const [resumeWatching, setResumeWatching] = useState([]);
+
+  // 1. Fetch Dynamic Viewer session & watch-history
+  useEffect(() => {
+    fetchSession();
+  }, []);
+
+  const fetchSession = async () => {
+    try {
+      const res = await fetch('/api/auth/me');
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data.user);
+        
+        // Seed watch history resume list for demonstration
+        setResumeWatching([
+          {
+            id: 'welcome-to-the-jungle',
+            title: 'Welcome To The Jungle',
+            thumbnail: '/thumbnails/welcome-to-the-jungle.jpg',
+            videoSrc: 'https://d2h58dsjpbzmve.cloudfront.net/50kjr%2Ffile%2F130200cb7ba80242a26d4c6e40d01842_1d5150b877ce5fa4fd0f73b36e1ee5d3.mp4',
+            resumeTime: 120, // Resume at 2 minutes
+            totalDuration: 180
+          }
+        ]);
+      }
+    } catch (err) {
+      console.error('Failed to resolve active viewer session:', err);
+    }
+  };
+
+  // 2. Fetch movies list dynamically from PostgreSQL database
+  useEffect(() => {
+    fetchMovies();
+  }, []);
+
+  const fetchMovies = async () => {
+    try {
+      const res = await fetch('/api/movies');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.length > 0) {
+          setMoviesList(data);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load DB movies:', err);
+    }
+  };
+
   /* ── Auto-rotate hero banner every 5 seconds ── */
   useEffect(() => {
     if (videoOverlay || notifyModal) return;
     const interval = setInterval(() => {
-      setHeroIndex((prev) => (prev + 1) % MOVIES.length);
+      setHeroIndex((prev) => (prev + 1) % moviesList.length);
     }, 5000);
     return () => clearInterval(interval);
-  }, [videoOverlay, notifyModal]);
+  }, [videoOverlay, notifyModal, moviesList]);
 
   /* ── Filter movies by search ── */
-  const filteredMovies = MOVIES.filter(
+  const filteredMovies = moviesList.filter(
     (m) =>
       m.title.toLowerCase().includes(search.toLowerCase()) ||
       m.genre.toLowerCase().includes(search.toLowerCase())
   );
 
-  const featured = MOVIES[heroIndex];
+  const featured = moviesList[heroIndex] || moviesList[0];
 
   /* ── Sequential card reveal on scroll ── */
   useEffect(() => {
@@ -184,7 +239,7 @@ export default function Home() {
   /* This avoids CORS issues since <video> tags don't require CORS headers */
   useEffect(() => {
     const preloaders = [];
-    MOVIES.forEach((m, i) => {
+    moviesList.forEach((m, i) => {
       setTimeout(() => {
         const v = document.createElement("video");
         v.preload = "auto";
@@ -202,7 +257,7 @@ export default function Home() {
         v.remove();
       });
     };
-  }, []);
+  }, [moviesList]);
 
   /* ── Video overlay controls ── */
   const openVideo = useCallback((movie) => {
@@ -302,13 +357,33 @@ export default function Home() {
     <>
       {/* ═══════ UTILITY BAR ═══════ */}
       <div className="utility-bar">
-        <a href="#">Download App</a>
-        <span className="sep">|</span>
-        <a href="#">Help</a>
-        <span className="sep">|</span>
-        <a href="#">Join Us</a>
-        <span className="sep">|</span>
-        <a href="#">Sign In</a>
+        {user ? (
+          <>
+            <span style={{ color: '#a1a1aa' }}>Welcome, <strong>{user.name}</strong> ({user.plan} Viewer)</span>
+            <span className="sep">|</span>
+            <Link href="/affiliate" style={{ color: '#60a5fa', fontWeight: 'bold' }}>Affiliate Network</Link>
+            <span className="sep">|</span>
+            <Link href="/subscription" style={{ color: '#f59e0b' }}>Pricing Packages</Link>
+            <span className="sep">|</span>
+            <button 
+              onClick={async () => {
+                await fetch('/api/auth/me', { method: 'DELETE' });
+                window.location.reload();
+              }}
+              style={{ background: 'transparent', border: 'none', color: '#a1a1aa', cursor: 'pointer', padding: 0 }}
+            >
+              Sign Out
+            </button>
+          </>
+        ) : (
+          <>
+            <Link href="/login">Viewer Login</Link>
+            <span className="sep">|</span>
+            <Link href="/signup">Sign Up</Link>
+            <span className="sep">|</span>
+            <Link href="/admin/login" style={{ color: '#ef4444' }}>CMS Admin Center</Link>
+          </>
+        )}
       </div>
 
       {/* ═══════ PRIMARY NAV ═══════ */}
@@ -326,10 +401,9 @@ export default function Home() {
         <div className="nav-links">
           <a href="#" className="active">Home</a>
           <a href="#live-news">Live News</a>
-          <a href="#">Movies</a>
-          <a href="#">Series</a>
-          <a href="#">Sports</a>
-          <a href="#">Originals</a>
+          <Link href="/affiliate">Affiliate Portal</Link>
+          <Link href="/subscription">Subscriptions</Link>
+          <Link href="/admin">Control Center</Link>
         </div>
 
         <div className="nav-right">
@@ -419,6 +493,41 @@ export default function Home() {
           ))}
         </div>
       </section>
+
+      {/* ═══════ RESUME WATCHING GRID ═══════ */}
+      {resumeWatching.length > 0 && (
+        <section className="section" id="resume-watching" style={{ background: 'rgba(255,255,255,0.02)', padding: '30px 40px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+          <div className="section-header">
+            <h2 className="section-title">Resume Watching</h2>
+            <span className="section-count">{resumeWatching.length} Titles Incomplete</span>
+          </div>
+
+          <div className="card-grid" style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+            {resumeWatching.map((item) => {
+              const watchedPct = Math.round((item.resumeTime / item.totalDuration) * 100);
+              return (
+                <div 
+                  className="movie-card" 
+                  key={item.id} 
+                  onClick={() => openVideo(item)}
+                  style={{ width: '280px', cursor: 'pointer', background: 'rgba(20,20,25,0.6)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', padding: '16px' }}
+                >
+                  <img 
+                    src={item.thumbnail} 
+                    alt={item.title} 
+                    style={{ width: '100%', height: '140px', objectFit: 'cover', borderRadius: '8px', marginBottom: '12px' }}
+                  />
+                  <h4 style={{ margin: '0 0 6px 0', fontSize: '15px' }}>{item.title}</h4>
+                  <div className="progress-bar-bg" style={{ height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden', marginBottom: '8px' }}>
+                    <div className="progress-bar-fill" style={{ width: `${watchedPct}%`, height: '100%', background: '#60a5fa' }}></div>
+                  </div>
+                  <span style={{ fontSize: '11px', color: '#a1a1aa' }}>Watched {watchedPct}% · {Math.round(item.resumeTime / 60)}m left</span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* ═══════ LIVE NEWS GRID ═══════ */}
       <section className="section" id="live-news">
@@ -555,41 +664,15 @@ export default function Home() {
         </div>
       </footer>
 
-      {/* ═══════ VIDEO PLAYER OVERLAY ═══════ */}
-      <div
-        className={`video-overlay ${videoOverlay ? "active" : ""}`}
-        onClick={(e) => { if (e.target === e.currentTarget) closeVideo(); }}
-        id="video-overlay"
-      >
-        <button className="close-btn" onClick={closeVideo} aria-label="Close video">
-          <IconX />
-        </button>
-        <div className="video-player-container">
-          {videoOverlay && videoError ? (
-            <div className="video-error-container">
-              <IconAlertTriangle />
-              <h3 className="video-error-title">Coming Soon</h3>
-              <p className="video-error-message">
-                Bezar is coming soon. The trailer for <strong>&ldquo;{videoOverlay.title}&rdquo;</strong> is currently offline or could not be loaded due to a network error.
-              </p>
-            </div>
-          ) : (
-            videoOverlay && (
-              <video
-                ref={videoRef}
-                controls
-                playsInline
-                preload="auto"
-                src={videoOverlay.videoSrc}
-                onError={handleVideoError}
-              />
-            )
-          )}
-          {videoOverlay && (
-            <span className="video-player-title">{videoOverlay.title}</span>
-          )}
-        </div>
-      </div>
+      {/* ═══════ CINEMATIC THEATER MODE OVERLAY ═══════ */}
+      {videoOverlay && (
+        <CinematicPlayer
+          movie={videoOverlay}
+          onClose={closeVideo}
+          initialTime={videoOverlay.resumeTime || 0}
+          userId={user?.id}
+        />
+      )}
 
       {/* ═══════ NOTIFY MODAL ═══════ */}
       <NotifyModal
