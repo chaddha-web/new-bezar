@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  # Next.js web application
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bezar_web
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres_secure_pass@db:5432/bezar
+      - NODE_ENV=production
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=bezar_secure_admin_pass
+      - AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=your_account;AccountKey=your_key;EndpointSuffix=core.windows.net
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # PostgreSQL database
+  db:
+    image: postgres:15-alpine
+    container_name: bezar_db
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres_secure_pass
+      - POSTGRES_DB=bezar
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql # Automatically run schema on startup
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d bezar"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local
