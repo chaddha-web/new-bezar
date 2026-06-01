@@ -106,19 +106,21 @@ INSERT INTO movies (id, title, genre, year, badge, thumbnail, video_src, descrip
 VALUES
 ('e34d3ebb-78a2-4ff1-b151-ba7ad4442305', 'Gully Boy', 'Drama · Music', '2019', 'Coming Soon', '/thumbnails/gully-boy.jpg', 'https://bucket-d4d96s.s3.us-east-1.amazonaws.com/Gully%20Boy%20%20Official%20Trailer%20%20Ranveer%20Singh%20%20Alia%20Bhatt%20%20Zoya%20Akhtar%2014th%20February%20-%20Excel%20Movies%20(1080p,%20h264).mp4', 'From the streets to the stage.', FALSE)
 
--- 9. Create MLM Nodes Table (Dual-Currency Optimized)
+-- 9. Create MLM Nodes Table (Web3 BEP-20 Ledger Optimized)
 CREATE TABLE IF NOT EXISTS mlm_nodes (
     node_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    parent_id UUID REFERENCES users(id) ON DELETE SET NULL, -- Immediate sponsor/upline
-    investment_amount_usd DECIMAL(15, 2) DEFAULT 100.00,
-    investment_amount_inr DECIMAL(15, 2) DEFAULT 9400.00, -- Fixed conversion: 1 USD = 94 INR
-    accumulated_earnings_usd DECIMAL(15, 2) DEFAULT 0.00,
+    parent_id UUID REFERENCES users(id) ON DELETE SET NULL, -- Sponsor upline
+    investment_amount_usd DECIMAL(15, 2) DEFAULT 100.00, -- Stablecoins ($100 baseline pack)
+    investment_amount_inr DECIMAL(15, 2) DEFAULT 9400.00, -- 1 USD = 94 INR fixed conversion
+    accumulated_earnings_usd DECIMAL(15, 2) DEFAULT 0.00, -- Total Stablecoins earned
     accumulated_earnings_inr DECIMAL(15, 2) DEFAULT 0.00,
-    wallet_balance_usd DECIMAL(15, 2) DEFAULT 0.00,
+    wallet_balance_usd DECIMAL(15, 2) DEFAULT 0.00, -- Withdrawable Stablecoin balance
     wallet_balance_inr DECIMAL(15, 2) DEFAULT 0.00,
     node_status VARCHAR(50) DEFAULT 'ACTIVE', -- 'PENDING', 'ACTIVE', 'EXPIRED'
     accelerator_mode VARCHAR(50) DEFAULT 'STANDARD', -- 'STANDARD', 'FAST_FORWARD'
-    current_rank VARCHAR(20) DEFAULT 'R1', -- 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7'
+    current_rank VARCHAR(20) DEFAULT 'R1', -- 'R1' through 'R7'
+    bsc_deposit_address VARCHAR(42) UNIQUE, -- Unique user BNB Smart Chain depot
+    user_payout_address VARCHAR(42), -- Designated Web3 address to receive payouts
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -133,14 +135,16 @@ CREATE TABLE IF NOT EXISTS daily_engagement (
     UNIQUE(user_id, date)
 );
 
--- 11. Create Core Wallet Ledger System (Dual-Currency Logging)
+-- 11. Create Core Wallet Ledger System (Web3 BEP-20 Transaction Audits)
 CREATE TABLE IF NOT EXISTS wallet_ledger (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     node_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    amount_usd DECIMAL(15, 2) NOT NULL,
+    amount_usd DECIMAL(15, 2) NOT NULL, -- Stablecoins credit/debit
     amount_inr DECIMAL(15, 2) NOT NULL,
     transaction_type VARCHAR(100) NOT NULL, -- 'YIELD', 'DIRECT_REFERRAL', 'MATCHING_COMMISSION', 'PEER_MATCH_OVERRIDE', 'WITHDRAWAL'
-    reference_node_id UUID REFERENCES users(id) ON DELETE SET NULL, -- Downstream node
+    reference_node_id UUID REFERENCES users(id) ON DELETE SET NULL, -- Downstream reference
+    bsc_tx_hash VARCHAR(66) UNIQUE, -- BNB Smart Chain transaction hash
+    token_symbol VARCHAR(10) DEFAULT 'USDT', -- 'USDT' or 'USDC'
     description TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -149,5 +153,6 @@ CREATE TABLE IF NOT EXISTS wallet_ledger (
 CREATE INDEX IF NOT EXISTS idx_mlm_nodes_parent ON mlm_nodes(parent_id);
 CREATE INDEX IF NOT EXISTS idx_wallet_ledger_node ON wallet_ledger(node_id);
 CREATE INDEX IF NOT EXISTS idx_daily_engagement_user_date ON daily_engagement(user_id, date);
+
 
 

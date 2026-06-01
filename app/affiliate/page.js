@@ -9,7 +9,7 @@ export default function AffiliateDashboard() {
   
   // Withdrawal Form State
   const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [withdrawCurrency, setWithdrawCurrency] = useState('INR'); // 'INR' or 'USD'
+  const [withdrawCurrency, setWithdrawCurrency] = useState('USDT'); // 'USDT' or 'USDC'
   const [withdrawError, setWithdrawError] = useState('');
   const [withdrawSuccess, setWithdrawSuccess] = useState('');
   const [processing, setProcessing] = useState(false);
@@ -23,7 +23,6 @@ export default function AffiliateDashboard() {
 
   const fetchAffiliateDetails = async () => {
     try {
-      // Query mock client values supporting the dual-currency parameters
       const detailsRes = await fetch(`/api/movies`);
       
       setNode({
@@ -35,13 +34,16 @@ export default function AffiliateDashboard() {
         wallet_balance_inr: 4700.00,
         node_status: 'ACTIVE',
         accelerator_mode: 'STANDARD',
-        current_rank: 'R2'
+        current_rank: 'R2',
+        bsc_deposit_address: '0xa34d3ebb78a24ff1b151ba7ad4442301deadbeef',
+        user_payout_address: '0x71C7656EC7ab88b098defB751B7401B5f6d8976F'
       });
 
       setLedger([
-        { id: '1', transaction_type: 'YIELD', amount_usd: 0.80, amount_inr: 75.20, created_at: new Date().toISOString(), description: 'Daily passive yield (0.8%)' },
-        { id: '2', transaction_type: 'DIRECT_REFERRAL', amount_usd: 5.00, amount_inr: 470.00, created_at: new Date().toISOString(), description: 'Direct referral commission fee (5%)' },
-        { id: '3', transaction_type: 'MATCHING_COMMISSION', amount_usd: 2.00, amount_inr: 188.00, created_at: new Date().toISOString(), description: 'R2 upline delta match' }
+        { id: '1', transaction_type: 'YIELD', amount_usd: 0.80, amount_inr: 75.20, bsc_tx_hash: null, created_at: new Date().toISOString(), description: 'Daily passive behavior yield (0.8%)' },
+        { id: '2', transaction_type: 'DIRECT_REFERRAL', amount_usd: 5.00, amount_inr: 470.00, bsc_tx_hash: null, created_at: new Date().toISOString(), description: 'Direct referral commission fee (5%)' },
+        { id: '3', transaction_type: 'MATCHING_COMMISSION', amount_usd: 2.00, amount_inr: 188.00, bsc_tx_hash: null, created_at: new Date().toISOString(), description: 'R2 upline differential delta match' },
+        { id: '4', transaction_type: 'WITHDRAWAL', amount_usd: -25.00, amount_inr: -2350.00, bsc_tx_hash: '0x991c059f00d71c7656ec7ab88b098defb751b7401b5f6d8976fdeadbeef', created_at: new Date().toISOString(), description: 'Outbound payout authorized' }
       ]);
     } catch (err) {
       console.error(err);
@@ -57,58 +59,44 @@ export default function AffiliateDashboard() {
     
     const amount = Number(withdrawAmount);
 
-    if (withdrawCurrency === 'INR') {
-      if (amount < 2350) {
-        setWithdrawError('Minimum authorized threshold is ₹2,350 INR.');
-        return;
-      }
-      if (amount % 2350 !== 0) {
-        setWithdrawError('Withdrawals are restricted exclusively to absolute increments of ₹2,350 INR.');
-        return;
-      }
-    } else {
-      // USD boundary checks
-      if (amount < 25) {
-        setWithdrawError('Minimum authorized threshold is $25 USD.');
-        return;
-      }
-      if (amount % 25 !== 0) {
-        setWithdrawError('Withdrawals are restricted exclusively to absolute increments of $25 USD.');
-        return;
-      }
+    if (amount < 25) {
+      setWithdrawError('Minimum authorized threshold is 25 Stablecoins ($25 USD).');
+      return;
+    }
+    if (amount % 25 !== 0) {
+      setWithdrawError('Withdrawals are restricted exclusively to absolute increments of 25 Stablecoins.');
+      return;
     }
 
     setProcessing(true);
 
     try {
-      // Convert target value to INR to process in database pipeline
-      const finalInrAmount = withdrawCurrency === 'INR' ? amount : amount * 94;
-
       const res = await fetch('/api/wallet/withdraw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: mockUserId, amount: finalInrAmount })
+        body: JSON.stringify({ userId: mockUserId, amountUsd: amount, tokenSymbol: withdrawCurrency })
       });
 
       const data = await res.json();
       if (res.ok && data.success) {
-        setWithdrawSuccess(`Authorized! Successfully withdrew $${(data.withdrawn / 94).toFixed(2)} USD / ₹${data.withdrawn} INR.`);
+        setWithdrawSuccess(`Authorized! Successfully withdrew ${data.withdrawnUsd} BEP-20 ${withdrawCurrency}. TxHash: ${data.bscTxHash.substring(0, 16)}...`);
         setWithdrawAmount('');
         
         setNode(prev => ({
           ...prev,
-          wallet_balance_usd: Number(prev.wallet_balance_usd) - (data.withdrawn / 94),
-          wallet_balance_inr: Number(prev.wallet_balance_inr) - data.withdrawn
+          wallet_balance_usd: Number(prev.wallet_balance_usd) - data.withdrawnUsd,
+          wallet_balance_inr: Number(prev.wallet_balance_inr) - data.withdrawnInr
         }));
 
         setLedger(prev => [
           {
             id: Date.now().toString(),
             transaction_type: 'WITHDRAWAL',
-            amount_usd: -(data.withdrawn / 94),
-            amount_inr: -data.withdrawn,
+            amount_usd: -data.withdrawnUsd,
+            amount_inr: -data.withdrawnInr,
+            bsc_tx_hash: data.bscTxHash,
             created_at: new Date().toISOString(),
-            description: `Outbound payout authorized`
+            description: `Outbound payout of ${data.withdrawnUsd} ${withdrawCurrency} authorized`
           },
           ...prev
         ]);
@@ -123,7 +111,7 @@ export default function AffiliateDashboard() {
   };
 
   if (loading) {
-    return <div className="affiliate-loading">Connecting to Wallet Engine...</div>;
+    return <div className="affiliate-loading">Connecting to Web3 Wallet Engine...</div>;
   }
 
   const maxCapUsd = Number(node?.investment_amount_usd || 100) * 2.5;
@@ -137,8 +125,22 @@ export default function AffiliateDashboard() {
         <div className="status-badge" data-status={node?.node_status}>{node?.node_status}</div>
       </header>
 
+      {/* WEB3 WALLET ADDR ROW */}
+      <section className="web3-info-row">
+        <div className="web3-addr-card">
+          <h4>Your Unique BEP-20 Deposit Depot (Send USDT/USDC here to activate)</h4>
+          <code className="crypto-address">{node?.bsc_deposit_address}</code>
+          <span className="net-tag">BNB Smart Chain (BSC)</span>
+        </div>
+        <div className="web3-addr-card">
+          <h4>Designated Payout Destination Address</h4>
+          <code className="crypto-address">{node?.user_payout_address}</code>
+          <span className="net-tag">USDT/USDC Smart Contract</span>
+        </div>
+      </section>
+
       {/* METRICS DASHBOARD ROW */}
-      <section className="metrics-row">
+      <section className="metrics-row" style={{ marginTop: '20px' }}>
         <div className="metric-box">
           <h4>Active Rank</h4>
           <h2>{node?.current_rank}</h2>
@@ -147,9 +149,9 @@ export default function AffiliateDashboard() {
         <div className="metric-box">
           <h4>Earnings Ceiling (2.5x Cap)</h4>
           <h2>
-            ${node?.accumulated_earnings_usd} <span className="cap-label">/ ${maxCapUsd} USD</span>
+            {node?.accumulated_earnings_usd} <span className="cap-label">/ {maxCapUsd} Stablecoins</span>
             <div style={{ fontSize: '14px', color: '#a1a1aa', marginTop: '4px' }}>
-              ₹{node?.accumulated_earnings_inr} / ₹{maxCapUsd * 94} INR
+              Value: ₹{node?.accumulated_earnings_inr} / ₹{maxCapUsd * 94} INR
             </div>
           </h2>
           <div className="progress-track">
@@ -158,9 +160,9 @@ export default function AffiliateDashboard() {
         </div>
         <div className="metric-box highlighted-box">
           <h4>Available Wallet Balance</h4>
-          <h2>${Number(node?.wallet_balance_usd).toFixed(2)} USD</h2>
+          <h2>{Number(node?.wallet_balance_usd).toFixed(2)} Stablecoins</h2>
           <div style={{ fontSize: '15px', color: '#a1a1aa', fontWeight: '600', marginTop: '4px' }}>
-            ₹{node?.wallet_balance_inr} INR
+            Value: ₹{node?.wallet_balance_inr} INR
           </div>
           <p style={{ marginTop: '10px' }}>Residual Floats Retained</p>
         </div>
@@ -178,7 +180,7 @@ export default function AffiliateDashboard() {
             {withdrawSuccess && <div className="alert alert-success">{withdrawSuccess}</div>}
 
             <div className="form-group">
-              <label>Select Currency</label>
+              <label>Select Stablecoin Asset</label>
               <select 
                 value={withdrawCurrency} 
                 onChange={(e) => {
@@ -196,29 +198,27 @@ export default function AffiliateDashboard() {
                   marginBottom: '10px'
                 }}
               >
-                <option value="INR">Indian Rupee (INR - ₹)</option>
-                <option value="USD">US Dollar (USD - $)</option>
+                <option value="USDT">BEP-20 USDT (BSC)</option>
+                <option value="USDC">BEP-20 USDC (BSC)</option>
               </select>
             </div>
 
             <div className="form-group">
-              <label>Withdrawal Amount</label>
+              <label>Withdrawal Amount (Stablecoins)</label>
               <input
                 type="number"
                 required
                 value={withdrawAmount}
                 onChange={(e) => setWithdrawAmount(e.target.value)}
-                placeholder={withdrawCurrency === 'INR' ? "Must be multiples of ₹2,350" : "Must be multiples of $25"}
+                placeholder="Must be multiples of 25"
               />
               <span className="step-hint">
-                {withdrawCurrency === 'INR' 
-                  ? "Increments: ₹2,350 · ₹4,700 · ₹7,050 · ₹9,400 etc." 
-                  : "Increments: $25 · $50 · $75 · $100 etc."}
+                Increments: 25 · 50 · 75 · 100 etc. (Equivalent to ₹2,350 increments)
               </span>
             </div>
 
             <button type="submit" disabled={processing} className="withdraw-submit-btn">
-              {processing ? 'Authorizing Payout...' : 'Release Payout'}
+              {processing ? 'Broadcasting BSC Payout...' : 'Release BEP-20 Payout'}
             </button>
           </form>
         </section>
@@ -233,9 +233,9 @@ export default function AffiliateDashboard() {
               <thead>
                 <tr>
                   <th>Type</th>
-                  <th>Amount (USD)</th>
-                  <th>Amount (INR)</th>
-                  <th>Description</th>
+                  <th>Value (Stablecoins)</th>
+                  <th>Equivalent (INR)</th>
+                  <th>Blockchain Audit (BscScan)</th>
                   <th>Date</th>
                 </tr>
               </thead>
@@ -248,12 +248,25 @@ export default function AffiliateDashboard() {
                       </span>
                     </td>
                     <td className={l.amount_usd < 0 ? 'negative-amt' : 'positive-amt'}>
-                      {l.amount_usd < 0 ? '-' : '+'}${(Math.abs(Number(l.amount_usd))).toFixed(2)}
+                      {l.amount_usd < 0 ? '-' : '+'}{(Math.abs(Number(l.amount_usd))).toFixed(2)}
                     </td>
                     <td className={l.amount_inr < 0 ? 'negative-amt' : 'positive-amt'}>
                       {l.amount_inr < 0 ? '-' : '+'}₹{Math.abs(Number(l.amount_inr)).toFixed(2)}
                     </td>
-                    <td className="desc-td">{l.description}</td>
+                    <td className="desc-td" style={{ fontFamily: 'monospace', fontSize: '11px' }}>
+                      {l.bsc_tx_hash ? (
+                        <a 
+                          href={`https://bscscan.com/tx/${l.bsc_tx_hash}`} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          style={{ color: '#60a5fa', textDecoration: 'underline' }}
+                        >
+                          {l.bsc_tx_hash.substring(0, 14)}...
+                        </a>
+                      ) : (
+                        <span style={{ color: '#52525b' }}>Internal Ledger</span>
+                      )}
+                    </td>
                     <td className="date-td">{new Date(l.created_at).toLocaleDateString()}</td>
                   </tr>
                 ))}
@@ -313,6 +326,56 @@ export default function AffiliateDashboard() {
           background: rgba(239, 68, 68, 0.1);
           border-color: rgba(239, 68, 68, 0.3);
           color: #ef4444;
+        }
+
+        .web3-info-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+          .web3-info-row {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        .web3-addr-card {
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 12px;
+          padding: 20px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .web3-addr-card h4 {
+          font-size: 11px;
+          text-transform: uppercase;
+          color: #a1a1aa;
+          margin: 0;
+          letter-spacing: 0.5px;
+        }
+
+        .crypto-address {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 13px;
+          color: #60a5fa;
+          background: rgba(0, 0, 0, 0.3);
+          padding: 8px 12px;
+          border-radius: 6px;
+          word-break: break-all;
+        }
+
+        .net-tag {
+          align-self: flex-start;
+          font-size: 9px;
+          font-weight: 800;
+          background: rgba(245, 158, 11, 0.1);
+          color: #f59e0b;
+          padding: 3px 8px;
+          border-radius: 4px;
         }
 
         .metrics-row {
