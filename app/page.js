@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import CinematicPlayer from "@/components/CinematicPlayer";
 
 /* ────────────────────────────────────────────
@@ -106,9 +107,6 @@ const LIVE_CHANNELS = [
 ];
 
 /* ────────── SVG ICONS (inline) ────────── */
-const IconSearch = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-);
 const IconPlay = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
 );
@@ -124,12 +122,6 @@ const IconCheck = () => (
 const IconMail = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
 );
-const IconChevronLeft = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-);
-const IconChevronRight = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-);
 const IconAlertTriangle = () => (
   <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--sale)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: "16px" }}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
 );
@@ -138,10 +130,15 @@ const IconAlertTriangle = () => (
    MAIN PAGE COMPONENT
    ================================================================ */
 export default function Home() {
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <HomeContent />
+    </Suspense>
+  );
+}
+
+function HomeContent() {
   const [videoOverlay, setVideoOverlay] = useState(null);
-  const [notifyModal, setNotifyModal] = useState(null);
-  const [search, setSearch] = useState("");
   const [heroIndex, setHeroIndex] = useState(0);
   const [videoError, setVideoError] = useState(false);
   const videoRef = useRef(null);
@@ -210,10 +207,12 @@ export default function Home() {
   }, [videoOverlay, notifyModal, moviesList]);
 
   /* ── Filter movies by search ── */
+  const searchParams = useSearchParams();
+  const searchQuery = searchParams.get("q") || "";
   const filteredMovies = moviesList.filter(
     (m) =>
-      m.title.toLowerCase().includes(search.toLowerCase()) ||
-      m.genre.toLowerCase().includes(search.toLowerCase())
+      m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      m.genre.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const featured = moviesList[heroIndex] || moviesList[0];
@@ -355,81 +354,6 @@ export default function Home() {
 
   return (
     <>
-      {/* ═══════ UTILITY BAR ═══════ */}
-      <div className="utility-bar">
-        {user ? (
-          <>
-            <span style={{ color: '#a1a1aa' }}>Welcome, <strong>{user.name}</strong> ({user.plan} Viewer)</span>
-            <span className="sep">|</span>
-            <Link href="/affiliate" style={{ color: '#60a5fa', fontWeight: 'bold' }}>Affiliate Network</Link>
-            <span className="sep">|</span>
-            <Link href="/subscription" style={{ color: '#f59e0b' }}>Pricing Packages</Link>
-            <span className="sep">|</span>
-            <button 
-              onClick={async () => {
-                await fetch('/api/auth/me', { method: 'DELETE' });
-                window.location.reload();
-              }}
-              style={{ background: 'transparent', border: 'none', color: '#a1a1aa', cursor: 'pointer', padding: 0 }}
-            >
-              Sign Out
-            </button>
-          </>
-        ) : (
-          <>
-            <Link href="/login">Viewer Login</Link>
-            <span className="sep">|</span>
-            <Link href="/signup">Sign Up</Link>
-            <span className="sep">|</span>
-            <Link href="/admin/login" style={{ color: '#ef4444' }}>CMS Admin Center</Link>
-          </>
-        )}
-      </div>
-
-      {/* ═══════ PRIMARY NAV ═══════ */}
-      <nav className="primary-nav">
-        <button
-          className={`nav-hamburger ${drawerOpen ? "open" : ""}`}
-          onClick={() => setDrawerOpen(!drawerOpen)}
-          aria-label="Menu"
-        >
-          <span />
-        </button>
-
-        <a href="/" className="nav-brand">Bezar</a>
-
-        <div className="nav-links">
-          <a href="#" className="active">Home</a>
-          <a href="#live-news">Live News</a>
-          <Link href="/affiliate">Affiliate Portal</Link>
-          <Link href="/subscription">Subscriptions</Link>
-          <Link href="/admin">Control Center</Link>
-        </div>
-
-        <div className="nav-right">
-          <div className="search-pill">
-            <IconSearch />
-            <input
-              type="text"
-              placeholder="Search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              id="search-input"
-            />
-          </div>
-        </div>
-      </nav>
-
-      {/* ═══════ MOBILE DRAWER ═══════ */}
-      <div className={`mobile-drawer ${drawerOpen ? "open" : ""}`}>
-        <a href="#" onClick={() => setDrawerOpen(false)}>Home</a>
-        <a href="#live-news" onClick={() => setDrawerOpen(false)}>Live News</a>
-        <a href="#" onClick={() => setDrawerOpen(false)}>Movies</a>
-        <a href="#" onClick={() => setDrawerOpen(false)}>Series</a>
-        <a href="#" onClick={() => setDrawerOpen(false)}>Sports</a>
-        <a href="#" onClick={() => setDrawerOpen(false)}>Originals</a>
-      </div>
-
       {/* ═══════ HERO CAMPAIGN TILE ═══════ */}
       <section className="hero" id="hero">
         <img
