@@ -60,6 +60,8 @@ services:
     build:
       context: ../Astro
       dockerfile: Dockerfile
+      args:
+        - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID}
     container_name: astro_web
     restart: always
     deploy:
