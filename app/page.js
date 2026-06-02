@@ -139,6 +139,7 @@ export default function Home() {
 
 function HomeContent() {
   const [videoOverlay, setVideoOverlay] = useState(null);
+  const [notifyModal, setNotifyModal] = useState(null);
   const [heroIndex, setHeroIndex] = useState(0);
   const [videoError, setVideoError] = useState(false);
   const videoRef = useRef(null);
