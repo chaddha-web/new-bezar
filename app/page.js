@@ -156,53 +156,49 @@ function HomeContent() {
   const [moviesList, setMoviesList] = useState(MOVIES);
   const [resumeWatching, setResumeWatching] = useState([]);
 
-  // 1. Fetch Dynamic Viewer session & watch-history
   useEffect(() => {
+    const fetchSession = async () => {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          setUser(data.user);
+          
+          // Seed watch history resume list for demonstration
+          setResumeWatching([
+            {
+              id: 'welcome-to-the-jungle',
+              title: 'Welcome To The Jungle',
+              thumbnail: '/thumbnails/welcome-to-the-jungle.jpg',
+              videoSrc: 'https://d2h58dsjpbzmve.cloudfront.net/50kjr%2Ffile%2F130200cb7ba80242a26d4c6e40d01842_1d5150b877ce5fa4fd0f73b36e1ee5d3.mp4',
+              resumeTime: 120, // Resume at 2 minutes
+              totalDuration: 180
+            }
+          ]);
+        }
+      } catch (err) {
+        console.error('Failed to resolve active viewer session:', err);
+      }
+    };
     fetchSession();
   }, []);
 
-  const fetchSession = async () => {
-    try {
-      const res = await fetch('/api/auth/me');
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data.user);
-        
-        // Seed watch history resume list for demonstration
-        setResumeWatching([
-          {
-            id: 'welcome-to-the-jungle',
-            title: 'Welcome To The Jungle',
-            thumbnail: '/thumbnails/welcome-to-the-jungle.jpg',
-            videoSrc: 'https://d2h58dsjpbzmve.cloudfront.net/50kjr%2Ffile%2F130200cb7ba80242a26d4c6e40d01842_1d5150b877ce5fa4fd0f73b36e1ee5d3.mp4',
-            resumeTime: 120, // Resume at 2 minutes
-            totalDuration: 180
-          }
-        ]);
-      }
-    } catch (err) {
-      console.error('Failed to resolve active viewer session:', err);
-    }
-  };
-
-  // 2. Fetch movies list dynamically from PostgreSQL database
   useEffect(() => {
+    const fetchMovies = async () => {
+      try {
+        const res = await fetch('/api/movies');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.length > 0) {
+            setMoviesList(data);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load DB movies:', err);
+      }
+    };
     fetchMovies();
   }, []);
-
-  const fetchMovies = async () => {
-    try {
-      const res = await fetch('/api/movies');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.length > 0) {
-          setMoviesList(data);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load DB movies:', err);
-    }
-  };
 
   /* ── Auto-rotate hero banner every 5 seconds ── */
   useEffect(() => {
