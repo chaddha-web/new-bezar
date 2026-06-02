@@ -2,20 +2,28 @@ import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { verifyBep20TokenDeposit } from '@/lib/web3';
 import { executeLedgerCredit } from '@/lib/mlm';
+import { verifyUserToken } from '@/lib/auth';
 
 export async function POST(request) {
   try {
-    const { userId, bscTxHash, tokenSymbol } = await request.json();
+    const session = request.cookies.get('bezar_user_session');
+    const payload = session ? await verifyUserToken(session.value) : null;
+    if (!payload) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const userId = payload.userId;
 
-    if (!userId || !bscTxHash) {
-      return NextResponse.json({ error: 'Missing userId or bscTxHash' }, { status: 400 });
+    const { bscTxHash, tokenSymbol } = await request.json();
+
+    if (!bscTxHash) {
+      return NextResponse.json({ error: 'Missing bscTxHash' }, { status: 400 });
     }
 
     await query('BEGIN');
 
-    // 1. Fetch user's provisioned BSC deposit address
+    // 1. Fetch user's node status
     const nodeRes = await query(
-      'SELECT bsc_deposit_address, parent_id, node_status FROM mlm_nodes WHERE node_id = $1 FOR UPDATE',
+      'SELECT parent_id, node_status FROM mlm_nodes WHERE node_id = $1 FOR UPDATE',
       [userId]
     );
 
@@ -24,7 +32,20 @@ export async function POST(request) {
       return NextResponse.json({ error: 'MLM Node not registered yet' }, { status: 404 });
     }
 
-    const { bsc_deposit_address, parent_id, node_status } = nodeRes.rows[0];
+    const { parent_id, node_status } = nodeRes.rows[0];
+
+    // 1.5 Fetch active locked wallet for this user
+    const lockRes = await query(
+      `SELECT wallet_address FROM wallet_locks WHERE user_id = $1 AND expires_at > CURRENT_TIMESTAMP`,
+      [userId]
+    );
+
+    if (lockRes.rows.length === 0) {
+      await query('ROLLBACK');
+      return NextResponse.json({ error: 'No active crypto address reservation found. Please request an address first.' }, { status: 400 });
+    }
+
+    const bsc_deposit_address = lockRes.rows[0].wallet_address;
 
     // 2. Perform on-chain transfer event audit with safety depths (12 blocks)
     const verification = await verifyBep20TokenDeposit(bscTxHash, bsc_deposit_address, tokenSymbol || 'USDT');
@@ -70,6 +91,9 @@ export async function POST(request) {
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [userId, investmentUsd, investmentInr, 'DEPOSIT', bscTxHash, tokenSymbol || 'USDT', `Contract deposit of ${investmentUsd} BEP-20 ${tokenSymbol}`]
     );
+
+    // Release the wallet lock instantly so someone else can use it
+    await query(`DELETE FROM wallet_locks WHERE user_id = $1`, [userId]);
 
     await query('COMMIT');
 

@@ -5,9 +5,19 @@ import {
   BlobSASPermissions, 
   StorageSharedKeyCredential 
 } from '@azure/storage-blob';
+import { verifyAdminToken } from '@/lib/auth';
 
 export async function POST(request) {
   try {
+    const session = request.cookies.get('bezar_admin_session');
+    if (!session || !session.value) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const payload = await verifyAdminToken(session.value);
+    if (!payload) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { filename, filetype } = await request.json();
     const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
     const containerName = process.env.AZURE_CONTAINER_NAME || 'bezar-media';

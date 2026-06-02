@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+import { signUserToken } from '@/lib/auth';
+import { comparePassword } from '@/lib/password';
 
 export async function POST(request) {
   try {
@@ -11,7 +13,7 @@ export async function POST(request) {
 
     // Lookup user credentials
     const userRes = await query(
-      'SELECT id, email, name, password_hash FROM users WHERE email = $1',
+      'SELECT id, email, name, password_hash, email_verified FROM users WHERE email = $1',
       [email]
     );
 
@@ -21,9 +23,16 @@ export async function POST(request) {
 
     const user = userRes.rows[0];
 
-    // Simple plain password comparison for seamless local testing
-    if (password !== user.password_hash) {
+    const isValid = await comparePassword(password, user.password_hash);
+    if (!isValid) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+    }
+
+    if (!user.email_verified) {
+      return NextResponse.json(
+        { error: 'Please verify your email first — check your inbox for the verification link.', needsVerification: true },
+        { status: 403 }
+      );
     }
 
     const response = NextResponse.json({
@@ -32,8 +41,9 @@ export async function POST(request) {
       user: { id: user.id, email: user.email, name: user.name }
     });
 
-    // Set secure viewer cookie
-    response.cookies.set('bezar_user_session', user.id, {
+    // Set secure JWT cookie
+    const token = await signUserToken(user.id, user.email);
+    response.cookies.set('bezar_user_session', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',

@@ -9,6 +9,16 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [movies, setMovies] = useState([]);
   const [channels, setChannels] = useState([]);
+
+  // System settings
+  const [minHoldInput, setMinHoldInput] = useState('');
+  const [hotWalletKey, setHotWalletKey] = useState('');
+  const [savingSetting, setSavingSetting] = useState(false);
+  const [settingsMsg, setSettingsMsg] = useState({ type: '', text: '' });
+  
+  // Company Wallets
+  const [companyWallets, setCompanyWallets] = useState([]);
+  const [newWalletInput, setNewWalletInput] = useState('');
   
   // Movie Form State
   const [movieTitle, setMovieTitle] = useState('');
@@ -46,14 +56,83 @@ export default function AdminDashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      const [moviesRes, channelsRes] = await Promise.all([
+      const [moviesRes, channelsRes, walletsRes] = await Promise.all([
         fetch('/api/movies'),
-        fetch('/api/live-channels')
+        fetch('/api/live-channels'),
+        fetch('/api/admin/wallets')
       ]);
       if (moviesRes.ok) setMovies(await moviesRes.json());
       if (channelsRes.ok) setChannels(await channelsRes.json());
+      if (walletsRes.ok) {
+        const { wallets } = await walletsRes.json();
+        setCompanyWallets(wallets || []);
+      }
+
+      const settingsRes = await fetch('/api/settings');
+      if (settingsRes.ok) {
+        const { settings } = await settingsRes.json();
+        if (settings?.MIN_HOLD_USD) setMinHoldInput(settings.MIN_HOLD_USD);
+        if (settings?.HOT_WALLET_PRIVATE_KEY) setHotWalletKey(settings.HOT_WALLET_PRIVATE_KEY);
+      }
     } catch (err) {
       console.error('Failed to load dashboard statistics:', err);
+    }
+  };
+
+  const saveSetting = async (key, value, successMsg) => {
+    setSettingsMsg({ type: '', text: '' });
+    setSavingSetting(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, value }),
+      });
+      const b = await res.json();
+      if (res.ok && b.success) {
+        setSettingsMsg({ type: 'ok', text: successMsg });
+      } else {
+        setSettingsMsg({ type: 'err', text: b.error || 'Failed to save setting.' });
+      }
+    } catch {
+      setSettingsMsg({ type: 'err', text: 'Network error saving setting.' });
+    } finally {
+      setSavingSetting(false);
+    }
+  };
+
+  const handleAddWallet = async (e) => {
+    e.preventDefault();
+    if (!newWalletInput) return;
+    try {
+      const res = await fetch('/api/admin/wallets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: newWalletInput })
+      });
+      if (res.ok) {
+        setNewWalletInput('');
+        fetchDashboardData();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to add wallet');
+      }
+    } catch (error) {
+      alert('Network error');
+    }
+  };
+
+  const handleDeleteWallet = async (id) => {
+    if (!confirm('Remove this wallet address?')) return;
+    try {
+      await fetch('/api/admin/wallets', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      fetchDashboardData();
+    } catch (error) {
+      alert('Network error');
     }
   };
 
@@ -187,6 +266,123 @@ export default function AdminDashboard() {
           <h4>Database Connection</h4>
           <h2 className="status-green">ONLINE</h2>
           <p>PostgreSQL Container Active</p>
+        </div>
+      </section>
+
+      {/* SYSTEM SETTINGS */}
+      <section style={{ padding: '0 40px', marginBottom: 30 }}>
+        <div className="dashboard-card">
+          <h3>System Settings</h3>
+          <p className="card-desc">Platform-wide configuration for the affiliate program.</p>
+
+          {settingsMsg.text && (
+            <div style={{
+              marginBottom: 16, padding: 12, borderRadius: 8, fontSize: 13,
+              background: settingsMsg.type === 'ok' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+              color: settingsMsg.type === 'ok' ? '#22c55e' : '#ef4444',
+              border: `1px solid ${settingsMsg.type === 'ok' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
+            }}>{settingsMsg.text}</div>
+          )}
+
+          <div className="form-row">
+            <form onSubmit={(e) => { e.preventDefault(); saveSetting('MIN_HOLD_USD', Number(minHoldInput), `Minimum hold updated to $${minHoldInput}.`); }} className="admin-form">
+              <div className="form-group">
+                <label>Minimum Hold (USD)</label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  required
+                  value={minHoldInput}
+                  onChange={(e) => setMinHoldInput(e.target.value)}
+                  placeholder="100"
+                />
+                <span style={{ fontSize: 12, color: '#52525b' }}>
+                  Applies to onboarding and top-up holds (must be in multiples of $5). ≈ ₹{Math.round(Number(minHoldInput || 0) * 94)}.
+                </span>
+              </div>
+              <button type="submit" className="submit-btn" disabled={savingSetting}>
+                {savingSetting ? 'Saving…' : 'Save Min Hold'}
+              </button>
+            </form>
+            
+            <form onSubmit={(e) => { e.preventDefault(); saveSetting('HOT_WALLET_PRIVATE_KEY', hotWalletKey, 'Hot Wallet Private Key secured successfully.'); }} className="admin-form">
+              <div className="form-group">
+                <label>System Hot Wallet (Withdrawal Payout Key)</label>
+                <input
+                  type="password"
+                  required
+                  value={hotWalletKey}
+                  onChange={(e) => setHotWalletKey(e.target.value)}
+                  placeholder="0x..."
+                />
+                <span style={{ fontSize: 12, color: '#ef4444' }}>
+                  <strong>CAUTION:</strong> This private key is used to sign automated BEP-20 payouts on the BSC Mainnet.
+                </span>
+              </div>
+              <button type="submit" className="submit-btn" disabled={savingSetting}>
+                {savingSetting ? 'Saving…' : 'Secure Private Key'}
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      {/* WALLET ROTATION MANAGER */}
+      <section style={{ padding: '0 40px', marginBottom: 30 }}>
+        <div className="dashboard-card">
+          <h3>Company Inbound Wallets</h3>
+          <p className="card-desc">The rotating BEP-20 pool used for accepting automated crypto deposits from Affiliates.</p>
+          
+          <form onSubmit={handleAddWallet} className="admin-form" style={{ maxWidth: 450, marginBottom: 20 }}>
+            <div className="form-group">
+              <label>Add New BEP-20 Address</label>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <input 
+                  type="text" 
+                  required 
+                  value={newWalletInput} 
+                  onChange={(e) => setNewWalletInput(e.target.value)} 
+                  placeholder="0x..." 
+                  style={{ flex: 1 }}
+                />
+                <button type="submit" className="submit-btn" style={{ marginTop: 0, padding: '12px 20px' }}>Add</button>
+              </div>
+            </div>
+          </form>
+
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Wallet ID</th>
+                <th>Network</th>
+                <th>Address</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {companyWallets.map(w => (
+                <tr key={w.id}>
+                  <td>#{w.id}</td>
+                  <td>{w.network}</td>
+                  <td className="src-url-td">{w.address}</td>
+                  <td className="status-green">Active</td>
+                  <td>
+                    <button 
+                      onClick={() => handleDeleteWallet(w.id)}
+                      style={{ background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', padding: '4px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}
+                    >Remove</button>
+                  </td>
+                </tr>
+              ))}
+              {companyWallets.length === 0 && (
+                <tr>
+                  <td colSpan="5" className="empty-td">No inbound wallets configured. The queue will fail.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
 

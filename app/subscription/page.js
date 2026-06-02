@@ -3,34 +3,59 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+
+
 export default function SubscriptionPricing() {
   const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState(null);
   const router = useRouter();
 
-  // Custom mock active userId to execute purchases locally
-  const mockUserId = 'a34d3ebb-78a2-4ff1-b151-ba7ad4442301';
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) setUser(d.user);
+      });
+  }, []);
 
   const handleSubscribe = async (planName, price) => {
+    if (!user) {
+      alert('Please log in first.');
+      router.push('/login');
+      return;
+    }
+
     setLoading(true);
     try {
-      // Simulate Stripe/Razorpay Payment Capture Webhook locally
-      const res = await fetch('/api/checkout/purchase', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: mockUserId,
-          amountPaid: price,
-          sponsorId: null
-        })
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        alert(`Success! You have purchased the ${planName} Plan. Premium HLS streams unlocked!`);
-        router.push('/');
-      } else {
-        alert(data.error || 'Subscription upgrade failed');
-      }
+      // 8% tax/surcharge for INR subscriptions
+      const totalInr = Math.round(price * 1.08);
+      const astroUrl = process.env.NEXT_PUBLIC_ASTRO_URL || 'http://localhost:3001';
+      const url = `${astroUrl}/?bezar_checkout=true&amountInr=${totalInr}&type=subscription&plan=${planName}&userId=${user.id}&name=${encodeURIComponent(user.name)}&email=${encodeURIComponent(user.email)}`;
+      const popup = window.open(url, 'AstroPayment', 'width=500,height=750,left=100,top=100');
+      
+      const handleMessage = async (event) => {
+        if (event.origin !== astroUrl) return;
+        if (event.data?.type === 'RAZORPAY_SUCCESS') {
+          window.removeEventListener('message', handleMessage);
+          
+          await fetch('/api/webhooks/astro-success', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: user.id,
+              paymentId: event.data.paymentId,
+              type: 'subscription',
+              planName: planName
+            })
+          });
+          
+          if (popup) popup.close();
+          alert(`Success! You have unlocked the ${planName} Plan. Premium content is now available!`);
+          window.location.href = '/';
+        }
+      };
+      
+      window.addEventListener('message', handleMessage);
     } catch (err) {
       console.error(err);
       alert('Network error captured during checkout process');
@@ -63,12 +88,12 @@ export default function SubscriptionPricing() {
           </button>
         </div>
 
-        {/* PREMIUM CARD */}
+        {/* MONTHLY CARD */}
         <div className="pricing-card highlighted-card">
           <div className="badge-featured">RECOMMENDED</div>
           <div className="card-top">
-            <h3>Premium Access</h3>
-            <div className="price-tag">₹9,400 <span>/ Pack</span></div>
+            <h3>Monthly Plan</h3>
+            <div className="price-tag">₹299 <span>/ Month</span></div>
           </div>
           <ul className="features-list">
             <li><strong>Full-screen Cinematic Theater Mode</strong></li>
@@ -76,16 +101,16 @@ export default function SubscriptionPricing() {
             <li>Access MLM & Network Affiliate earnings</li>
             <li>Yields multipliers up to 0.8% daily</li>
           </ul>
-          <button onClick={() => handleSubscribe('Premium', 9400)} disabled={loading} className="card-btn primary-btn">
-            {loading ? 'Processing Checkout...' : 'Unlock Premium Access'}
+          <button onClick={() => handleSubscribe('Monthly', 299)} disabled={loading} className="card-btn primary-btn">
+            {loading ? 'Processing Checkout...' : 'Subscribe Monthly'}
           </button>
         </div>
 
-        {/* PLATINUM CARD */}
+        {/* YEARLY CARD */}
         <div className="pricing-card">
           <div className="card-top">
-            <h3>Platinum Mogul</h3>
-            <div className="price-tag">₹18,800 <span>/ Pack</span></div>
+            <h3>Yearly Plan</h3>
+            <div className="price-tag">₹3,299 <span>/ Year</span></div>
           </div>
           <ul className="features-list">
             <li>4K Cinema video playback channels</li>
@@ -93,8 +118,8 @@ export default function SubscriptionPricing() {
             <li>Double direct commission referral tiers</li>
             <li>Accelerated 2.5x caps payouts</li>
           </ul>
-          <button onClick={() => handleSubscribe('Platinum', 18800)} disabled={loading} className="card-btn secondary-btn">
-            {loading ? 'Processing Checkout...' : 'Go Platinum'}
+          <button onClick={() => handleSubscribe('Yearly', 3299)} disabled={loading} className="card-btn secondary-btn">
+            {loading ? 'Processing Checkout...' : 'Subscribe Yearly'}
           </button>
         </div>
       </section>

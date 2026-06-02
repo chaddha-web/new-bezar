@@ -10,6 +10,15 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     name VARCHAR(255),
+    email_verified BOOLEAN DEFAULT FALSE, -- set true once the signup magic link is clicked
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2.5 Create Auth Tokens Table for Magic Links
+CREATE TABLE IF NOT EXISTS auth_tokens (
+    token VARCHAR(64) PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -105,6 +114,7 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO movies (id, title, genre, year, badge, thumbnail, video_src, description, is_featured)
 VALUES
 ('e34d3ebb-78a2-4ff1-b151-ba7ad4442305', 'Gully Boy', 'Drama · Music', '2019', 'Coming Soon', '/thumbnails/gully-boy.jpg', 'https://bucket-d4d96s.s3.us-east-1.amazonaws.com/Gully%20Boy%20%20Official%20Trailer%20%20Ranveer%20Singh%20%20Alia%20Bhatt%20%20Zoya%20Akhtar%2014th%20February%20-%20Excel%20Movies%20(1080p,%20h264).mp4', 'From the streets to the stage.', FALSE)
+ON CONFLICT (id) DO NOTHING;
 
 -- 9. Create MLM Nodes Table (Web3 BEP-20 Ledger Optimized)
 CREATE TABLE IF NOT EXISTS mlm_nodes (
@@ -121,8 +131,14 @@ CREATE TABLE IF NOT EXISTS mlm_nodes (
     current_rank VARCHAR(20) DEFAULT 'R1', -- 'R1' through 'R7'
     bsc_deposit_address VARCHAR(42) UNIQUE, -- Unique user BNB Smart Chain depot
     user_payout_address VARCHAR(42), -- Designated Web3 address to receive payouts
+    username VARCHAR(50), -- Affiliate handle; NULL until the user joins the affiliate program
+    currency_preference VARCHAR(10) DEFAULT 'INR', -- 'INR' | 'USDT' | 'USDC'
+    withdrawal_pin_hash VARCHAR(255), -- bcrypt hash of the 4–6 digit cash-out PIN, set at onboarding
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Case-insensitive uniqueness for affiliate usernames (allows multiple NULLs)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mlm_username_lower ON mlm_nodes (LOWER(username));
 
 -- 10. Create Daily Engagement Telemetry Trackers
 CREATE TABLE IF NOT EXISTS daily_engagement (
@@ -145,14 +161,49 @@ CREATE TABLE IF NOT EXISTS wallet_ledger (
     reference_node_id UUID REFERENCES users(id) ON DELETE SET NULL, -- Downstream reference
     bsc_tx_hash VARCHAR(66) UNIQUE, -- BNB Smart Chain transaction hash
     token_symbol VARCHAR(10) DEFAULT 'USDT', -- 'USDT' or 'USDC'
+    idempotency_key VARCHAR(100) UNIQUE, -- Deduplication guard for API retries
     description TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 11.5 System Settings (admin-tunable key/value config)
+CREATE TABLE IF NOT EXISTS system_settings (
+    key VARCHAR(100) PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Default tunables (do not overwrite existing operator-set values)
+INSERT INTO system_settings (key, value) VALUES ('MIN_HOLD_USD', '100') ON CONFLICT (key) DO NOTHING;
+INSERT INTO system_settings (key, value) VALUES ('MAX_INR_TRANSACTION', '30000') ON CONFLICT (key) DO NOTHING;
 
 -- Indexing for high-speed unilevel hierarchy lookups
 CREATE INDEX IF NOT EXISTS idx_mlm_nodes_parent ON mlm_nodes(parent_id);
 CREATE INDEX IF NOT EXISTS idx_wallet_ledger_node ON wallet_ledger(node_id);
 CREATE INDEX IF NOT EXISTS idx_daily_engagement_user_date ON daily_engagement(user_id, date);
 
+-- 12. Idempotency Constraint: Physically prevent double-yields on the same day
+CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_yield ON wallet_ledger(node_id, (CAST(created_at AT TIME ZONE 'UTC' AS DATE))) WHERE transaction_type = 'YIELD';
 
+-- 13. Company Crypto Wallets & Rotation Queue
+CREATE TABLE IF NOT EXISTS company_crypto_wallets (
+    address VARCHAR(42) PRIMARY KEY,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
 
+CREATE TABLE IF NOT EXISTS wallet_locks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    wallet_address VARCHAR(42) REFERENCES company_crypto_wallets(address) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Seed initial 4 wallets provided by user
+INSERT INTO company_crypto_wallets (address) VALUES 
+('0x73E47F7537E79763d409A69D237376bb679FD905'),
+('0x78E469A677383Aba855B07Fc206C55fb8b575b60'),
+('0x63839E0EA4f01eFEE4a882ba40Fa6eBCc4F4a58E'),
+('0x7e32e2989fbA638b57A29916ca0cc347d83eB37C')
+ON CONFLICT (address) DO NOTHING;

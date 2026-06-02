@@ -1,20 +1,39 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { executeLedgerCredit } from '@/lib/mlm';
+import { verifyUserToken } from '@/lib/auth';
 
 export async function POST(request) {
   try {
-    const { userId, sponsorId, amountPaid } = await request.json();
+    const session = request.cookies.get('bezar_user_session');
+    const payload = session ? await verifyUserToken(session.value) : null;
+    if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const userId = payload.userId;
 
-    if (!userId || !amountPaid) {
-      return NextResponse.json({ error: 'Missing userId or amountPaid' }, { status: 400 });
+    const idempotencyKey = request.headers.get('Idempotency-Key');
+    if (!idempotencyKey) {
+      return NextResponse.json({ error: 'Idempotency-Key header is required' }, { status: 400 });
+    }
+
+    const { sponsorId, amountPaid } = await request.json();
+
+    if (!amountPaid) {
+      return NextResponse.json({ error: 'Missing amountPaid' }, { status: 400 });
+    }
+
+    const allowedPlans = {
+      299: 299 / 94,
+      3299: 3299 / 94,
+      9400: 100, // Legacy baseline pack
+      18800: 200
+    };
+
+    if (!allowedPlans[amountPaid]) {
+      return NextResponse.json({ error: 'Invalid plan selected' }, { status: 400 });
     }
 
     const investment = Number(amountPaid);
-
-    if (investment < 9400) {
-      return NextResponse.json({ error: 'Minimum package threshold is ₹9,400 INR' }, { status: 400 });
-    }
+    const investmentUsd = allowedPlans[amountPaid];
 
     await query('BEGIN');
 
@@ -47,14 +66,15 @@ export async function POST(request) {
 
     if (sponsor) {
       // Compute 5% Direct Fee
-      const directFee = investment * 0.05;
+      const directFeeUsd = investmentUsd * 0.05;
       
       // Credit direct sponsor wallet (Subject to 2.5x capping loops)
       const commissionRes = await executeLedgerCredit({
         nodeId: sponsor,
-        amount: directFee,
+        amountUsd: directFeeUsd,
         type: 'DIRECT_REFERRAL',
         referenceNodeId: userId,
+        idempotencyKey,
         description: `Direct referral onboarding commission fee (5% of ₹${investment} purchase)`
       });
 

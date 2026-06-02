@@ -4,16 +4,20 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+
+
 export default function UserLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
     setLoading(true);
 
     try {
@@ -25,7 +29,7 @@ export default function UserLogin() {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        // Redirect back home upon successful login
+        setSuccess('Signed in. Redirecting…');
         router.push('/');
       } else {
         setError(data.error || 'Authentication failed');
@@ -48,6 +52,7 @@ export default function UserLogin() {
 
         <form onSubmit={handleLogin} className="login-form">
           {error && <div className="error-banner">{error}</div>}
+          {success && <div className="success-banner">{success}</div>}
 
           <div className="input-group">
             <label htmlFor="email">Email Address</label>
@@ -69,12 +74,12 @@ export default function UserLogin() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••••••"
+              placeholder="Your password"
             />
           </div>
 
-          <button type="submit" className="login-btn" disabled={loading}>
-            {loading ? 'Verifying Credentials...' : 'Sign In'}
+          <button type="submit" className="login-btn" disabled={loading || success}>
+            {loading ? 'Signing in...' : success ? 'Success!' : 'Sign In'}
           </button>
         </form>
 
@@ -145,6 +150,16 @@ export default function UserLogin() {
           text-align: center;
         }
 
+        .success-banner {
+          background: rgba(34, 197, 94, 0.15);
+          border: 1px solid rgba(34, 197, 94, 0.3);
+          color: #4ade80;
+          padding: 12px;
+          border-radius: 8px;
+          font-size: 14px;
+          text-align: center;
+        }
+
         .input-group {
           display: flex;
           flex-direction: column;
@@ -172,6 +187,19 @@ export default function UserLogin() {
           outline: none;
           border-color: #fff;
           box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+        }
+
+        .checkbox-group {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-top: 5px;
+        }
+
+        .checkbox-group label {
+          font-size: 13px;
+          color: #a1a1aa;
+          cursor: pointer;
         }
 
         .login-btn {
@@ -210,6 +238,11 @@ export default function UserLogin() {
         .signup-link a {
           color: #fff;
           text-decoration: underline;
+        }
+
+        @media (max-width: 480px) {
+          .login-card { padding: 28px 22px; }
+          .logo-text { font-size: 30px; letter-spacing: 4px; }
         }
       `}</style>
     </main>

@@ -6,7 +6,10 @@ export async function POST(request) {
   try {
     // 1. Verify cron authorization (API secret check)
     const authHeader = request.headers.get('authorization');
-    if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    if (!process.env.CRON_SECRET) {
+      return NextResponse.json({ error: 'CRON_SECRET is missing on server. Halting.' }, { status: 500 });
+    }
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

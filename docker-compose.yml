@@ -8,14 +8,18 @@ services:
       dockerfile: Dockerfile
     container_name: bezar_web
     restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    # ceiling so a runaway request can't OOM the host. The DB is weighted higher.
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres_secure_pass@db:5432/bezar
       - NODE_ENV=production
-      - ADMIN_USERNAME=admin
-      - ADMIN_PASSWORD=bezar_secure_admin_pass
-      - AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=your_account;AccountKey=your_key;EndpointSuffix=core.windows.net
     depends_on:
       db:
         condition: service_healthy
@@ -25,10 +29,20 @@ services:
     image: postgres:15-alpine
     container_name: bezar_db
     restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+    # Resource priority: the DB is the shared bottleneck (recursive MLM tree
+    # CTEs, FOR UPDATE row locks on the wallet/ledger paths), so it gets 2x the
+    # CPU scheduling weight of the web tier plus a guaranteed memory reservation.
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres_secure_pass
       - POSTGRES_DB=bezar
+    env_file:
+      - .env
     ports:
       - "5432:5432"
     volumes:
@@ -40,6 +54,25 @@ services:
       timeout: 5s
       retries: 5
 
+
+  # Astro Web Application (INR Payment Gateway)
+  astro_web:
+    build:
+      context: ../Astro
+      dockerfile: Dockerfile
+    container_name: astro_web
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 256M
+    env_file:
+      - .env
+    ports:
+      - "3001:4173"
+
 volumes:
   postgres_data:
     driver: local
+

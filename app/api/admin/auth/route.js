@@ -1,18 +1,25 @@
 import { NextResponse } from 'next/server';
+import { signAdminToken, verifyAdminToken } from '@/lib/auth';
 
 export async function POST(request) {
   try {
     const { username, password } = await request.json();
     
     const targetUser = process.env.ADMIN_USERNAME || 'admin';
-    const targetPass = process.env.ADMIN_PASSWORD || 'bezar_secure_admin_pass';
+    const targetPass = process.env.ADMIN_PASSWORD;
+
+    if (!targetPass) {
+      throw new Error('ADMIN_PASSWORD environment variable is required');
+    }
 
     if (username === targetUser && password === targetPass) {
       // Create session payload
       const response = NextResponse.json({ success: true, message: 'Logged in successfully' });
       
+      const token = await signAdminToken();
+      
       // Set httpOnly secure cookie
-      response.cookies.set('bezar_admin_session', 'authenticated_token_active', {
+      response.cookies.set('bezar_admin_session', token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
@@ -33,8 +40,11 @@ export async function POST(request) {
 // GET handler to check auth status
 export async function GET(request) {
   const session = request.cookies.get('bezar_admin_session');
-  if (session && session.value === 'authenticated_token_active') {
-    return NextResponse.json({ authenticated: true });
+  if (session && session.value) {
+    const payload = await verifyAdminToken(session.value);
+    if (payload) {
+      return NextResponse.json({ authenticated: true });
+    }
   }
   return NextResponse.json({ authenticated: false }, { status: 401 });
 }

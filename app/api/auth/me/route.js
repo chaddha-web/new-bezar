@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+import { verifyUserToken } from '@/lib/auth';
 
 export async function GET(request) {
   try {
@@ -9,7 +10,12 @@ export async function GET(request) {
       return NextResponse.json({ authenticated: false }, { status: 401 });
     }
 
-    const userId = session.value;
+    const payload = await verifyUserToken(session.value);
+    if (!payload) {
+      return NextResponse.json({ authenticated: false }, { status: 401 });
+    }
+
+    const userId = payload.userId;
 
     // Resolve viewer details along with subscription plan
     const userRes = await query(

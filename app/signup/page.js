@@ -1,36 +1,41 @@
 "use client";
 
 import { useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 function SignupForm() {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  
-  const router = useRouter();
+
   const searchParams = useSearchParams();
   const sponsorId = searchParams.get('ref') || ''; // Handle referral invite links
 
   const handleSignup = async (e) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
+    setSuccess('');
 
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+
+    setLoading(true);
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name, sponsorId }),
+        body: JSON.stringify({ name, email, password, sponsorId }),
       });
 
       const data = await res.json();
       if (res.ok && data.success) {
-        // Redirect to login upon successful registration
-        router.push('/login');
+        setSuccess(data.message || 'Account created. Check your email to verify your account.');
       } else {
         setError(data.error || 'Registration failed');
       }
@@ -51,6 +56,7 @@ function SignupForm() {
 
       <form onSubmit={handleSignup} className="signup-form">
         {error && <div className="error-banner">{error}</div>}
+        {success && <div className="success-banner">{success}</div>}
 
         {sponsorId && (
           <div className="referral-banner">
@@ -66,7 +72,7 @@ function SignupForm() {
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Your Name"
+            placeholder="Your name"
           />
         </div>
 
@@ -88,14 +94,15 @@ function SignupForm() {
             type="password"
             id="password"
             required
+            minLength={8}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Create strong password"
+            placeholder="At least 8 characters"
           />
         </div>
 
-        <button type="submit" className="signup-btn" disabled={loading}>
-          {loading ? 'Registering Account...' : 'Sign Up'}
+        <button type="submit" className="signup-btn" disabled={loading || success}>
+          {loading ? 'Creating account...' : success ? 'Check your email' : 'Sign Up'}
         </button>
       </form>
 
@@ -105,6 +112,8 @@ function SignupForm() {
     </div>
   );
 }
+
+
 
 export default function UserSignup() {
   return (
@@ -175,6 +184,16 @@ export default function UserSignup() {
           text-align: center;
         }
 
+        .success-banner {
+          background: rgba(34, 197, 94, 0.15);
+          border: 1px solid rgba(34, 197, 94, 0.3);
+          color: #4ade80;
+          padding: 12px;
+          border-radius: 8px;
+          font-size: 14px;
+          text-align: center;
+        }
+
         .referral-banner {
           background: rgba(168, 85, 247, 0.1);
           border: 1px solid rgba(168, 85, 247, 0.25);
@@ -214,6 +233,19 @@ export default function UserSignup() {
           box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
         }
 
+        .checkbox-group {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-top: 5px;
+        }
+
+        .checkbox-group label {
+          font-size: 13px;
+          color: #a1a1aa;
+          cursor: pointer;
+        }
+
         .signup-btn {
           margin-top: 10px;
           background: #fff;
@@ -250,6 +282,11 @@ export default function UserSignup() {
         .login-link a {
           color: #fff;
           text-decoration: underline;
+        }
+
+        @media (max-width: 480px) {
+          .signup-card { padding: 28px 22px; }
+          .logo-text { font-size: 30px; letter-spacing: 4px; }
         }
 
         .affiliate-loading {
