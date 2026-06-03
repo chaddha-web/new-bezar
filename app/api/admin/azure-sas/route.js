@@ -53,6 +53,23 @@ export async function POST(request) {
     const credential = new StorageSharedKeyCredential(accountName, accountKey);
     const blobServiceClient = BlobServiceClient.fromConnectionString(connectionString);
     const containerClient = blobServiceClient.getContainerClient(containerName);
+
+    // Ensure CORS is configured for direct browser uploads
+    try {
+      await blobServiceClient.setProperties({
+        cors: [
+          {
+            allowedOrigins: "*",
+            allowedMethods: "GET,PUT,POST,OPTIONS,HEAD",
+            allowedHeaders: "*",
+            exposedHeaders: "*",
+            maxAgeInSeconds: 86400
+          }
+        ]
+      });
+    } catch (e) {
+      console.warn("Could not set CORS properties:", e.message);
+    }
     
     // Ensure the media container exists
     try {
