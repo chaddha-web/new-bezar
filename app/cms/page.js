@@ -306,7 +306,7 @@ export default function CMSDashboard() {
           <div className="inline-progress-overlay">
             <div className="inline-progress-text">Uploading... {asset.progress}%</div>
             <div className="inline-progress-track">
-              <div className="inline-progress-fill" style={{ width: \`\${asset.progress}%\` }}></div>
+              <div className="inline-progress-fill" style={{ width: `${asset.progress}%` }}></div>
             </div>
           </div>
         )}
@@ -503,7 +503,7 @@ export default function CMSDashboard() {
                             </div>
                             
                             {ep.status === 'UPLOADING' && (
-                              <div style={{position: 'absolute', bottom: 0, left: 0, height: '3px', background: '#3b82f6', width: \`\${ep.progress}%\`, transition: 'width 0.2s'}}></div>
+                              <div style={{position: 'absolute', bottom: 0, left: 0, height: '3px', background: '#3b82f6', width: `${ep.progress}%`, transition: 'width 0.2s'}}></div>
                             )}
                           </div>
 
