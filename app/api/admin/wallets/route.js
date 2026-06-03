@@ -10,7 +10,7 @@ export async function GET(request) {
     const payload = await verifyAdminToken(session.value);
     if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const res = await query(`SELECT * FROM company_crypto_wallets ORDER BY id ASC`);
+    const res = await query(`SELECT * FROM company_crypto_wallets`);
     return NextResponse.json({ success: true, wallets: res.rows });
   } catch (err) {
     return NextResponse.json({ error: 'Failed to fetch wallets' }, { status: 500 });

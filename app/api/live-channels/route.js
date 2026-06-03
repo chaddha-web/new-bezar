@@ -4,7 +4,7 @@ import { query } from '@/lib/db';
 export async function GET() {
   try {
     const result = await query(
-      'SELECT id, title, genre, logo, video_src as "videoSrc", description, badge FROM live_channels ORDER BY created_at ASC'
+      'SELECT id, title, genre, logo, video_src as "videoSrc", description FROM live_channels ORDER BY created_at ASC'
     );
     // If table is empty, seed live channels manually inside the API
     if (result.rows.length === 0) {
