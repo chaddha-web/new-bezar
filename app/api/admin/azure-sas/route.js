@@ -55,7 +55,16 @@ export async function POST(request) {
     const containerClient = blobServiceClient.getContainerClient(containerName);
     
     // Ensure the media container exists
-    await containerClient.createIfNotExists({ access: 'blob' });
+    try {
+      await containerClient.createIfNotExists({ access: 'blob' });
+    } catch (e) {
+      if (e.code === 'PublicAccessNotPermitted') {
+        // If the storage account has disabled public access, create it as private
+        await containerClient.createIfNotExists();
+      } else {
+        console.warn('Could not create container:', e.message);
+      }
+    }
 
     const blobName = `${Date.now()}-${filename}`;
     const blockBlobClient = containerClient.getBlockBlobClient(blobName);
