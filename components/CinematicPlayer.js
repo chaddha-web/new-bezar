@@ -10,6 +10,7 @@ export default function CinematicPlayer({ movie, onClose, initialTime = 0, userI
   const containerRef = useRef(null);
   
   const [playing, setPlaying] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(true);
   const [currentTime, setCurrentTime] = useState(initialTime);
   const [duration, setDuration] = useState(0);
   const [showControls, setShowControls] = useState(true);
@@ -200,12 +201,22 @@ export default function CinematicPlayer({ movie, onClose, initialTime = 0, userI
             <p>Could not initialize HLS streams. Telemetry link is offline or blocked.</p>
           </div>
         ) : (
-          <video
-            ref={videoRef}
-            playsInline
-            onTimeUpdate={handleTimeUpdate}
-            onLoadedMetadata={handleLoadedMetadata}
-          />
+          <>
+            {isBuffering && (
+              <div className="buffering-spinner">
+                <div className="spinner-ring"></div>
+              </div>
+            )}
+            <video
+              ref={videoRef}
+              playsInline
+              onTimeUpdate={handleTimeUpdate}
+              onLoadedMetadata={handleLoadedMetadata}
+              onWaiting={() => setIsBuffering(true)}
+              onPlaying={() => setIsBuffering(false)}
+              onCanPlay={() => setIsBuffering(false)}
+            />
+          </>
         )}
       </div>
 
@@ -368,6 +379,30 @@ export default function CinematicPlayer({ movie, onClose, initialTime = 0, userI
           height: 100%;
           max-height: 100vh;
           object-fit: contain;
+        }
+
+        .buffering-spinner {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(0,0,0,0.3);
+          z-index: 5;
+          pointer-events: none;
+        }
+
+        .spinner-ring {
+          width: 50px;
+          height: 50px;
+          border: 4px solid rgba(255,255,255,0.1);
+          border-top-color: #fff;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+          to { transform: rotate(360deg); }
         }
 
         .error-panel {
