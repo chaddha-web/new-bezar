@@ -13,6 +13,11 @@ export default function CMSDashboard() {
   const [username, setUsername] = useState('');
   const [loadingAuth, setLoadingAuth] = useState(true);
 
+  // Views: COLLECTION | UPLOAD
+  const [view, setView] = useState('COLLECTION');
+  const [collection, setCollection] = useState([]);
+  const [loadingCollection, setLoadingCollection] = useState(true);
+
   // Form State
   const [contentType, setContentType] = useState('MOVIE'); // 'MOVIE' | 'SERIES'
   const [title, setTitle] = useState('');
@@ -42,11 +47,28 @@ export default function CMSDashboard() {
     fetch('/api/cms/auth')
       .then(res => res.json())
       .then(data => {
-        if (data.authenticated) setUsername(data.username);
-        else router.push('/login');
+        if (data.authenticated) {
+          setUsername(data.username);
+          fetchCollection();
+        } else router.push('/login');
       })
       .finally(() => setLoadingAuth(false));
   }, []);
+
+  const fetchCollection = async () => {
+    setLoadingCollection(true);
+    try {
+      const res = await fetch('/api/movies');
+      if (res.ok) {
+        const data = await res.json();
+        setCollection(data);
+      }
+    } catch(e) {
+      console.error(e);
+    } finally {
+      setLoadingCollection(false);
+    }
+  };
 
   const handleLogout = async () => {
     await fetch('/api/cms/auth', { method: 'DELETE' });
@@ -73,7 +95,6 @@ export default function CMSDashboard() {
   };
 
   const generateThumbnail = async () => {
-    // Determine which video to use
     let sourceFile = null;
     if (contentType === 'MOVIE' && movieFile) {
       sourceFile = movieFile;
@@ -100,7 +121,6 @@ export default function CMSDashboard() {
 
       await new Promise((resolve, reject) => {
         video.onloadeddata = () => {
-          // Seek to 5 seconds or 10% of the video
           video.currentTime = Math.min(5, video.duration * 0.1);
         };
         video.onseeked = () => resolve();
@@ -252,7 +272,13 @@ export default function CMSDashboard() {
       if (!saveRes.ok) throw new Error("Failed to save to database");
 
       alert("Content uploaded successfully! It is now PENDING review by the Admin.");
-      window.location.reload();
+      // Go back to collection and refresh
+      setView('COLLECTION');
+      fetchCollection();
+
+      // Reset form
+      setTitle(''); setGenre(''); setYear(new Date().getFullYear().toString()); setDescription(''); setTags(''); setCredits('');
+      setThumbnailFile(null); setTrailerFile(null); setMovieFile(null); setEpisodes([]);
 
     } catch (err) {
       console.error(err);
@@ -307,148 +333,203 @@ export default function CMSDashboard() {
       </nav>
 
       <main className="cms-main">
-        <div className="cms-header">
-          <h2>Upload New Content</h2>
-          <p>All uploads will be placed in the Moderation Queue for Admin approval before going live.</p>
-        </div>
-
-        <form onSubmit={handlePublish}>
-          <div className="content-type-selector">
-            <button type="button" onClick={() => setContentType('MOVIE')} className={`type-btn ${contentType === 'MOVIE' ? 'active' : ''}`}>
-              <Film size={20} /> Movie
-            </button>
-            <button type="button" onClick={() => setContentType('SERIES')} className={`type-btn ${contentType === 'SERIES' ? 'active' : ''}`}>
-              <Tv size={20} /> Web Series
-            </button>
-          </div>
-
-          <div className="grid-2">
-            <div className="cms-card">
-              <h3 style={{color: '#ef4444'}}><FileText size={20} /> Core Metadata</h3>
-              <div className="form-group">
-                <label>Title</label>
-                <input type="text" required value={title} onChange={e => setTitle(e.target.value)} className="form-input" placeholder="e.g. Inception" />
+        {view === 'COLLECTION' ? (
+          <div className="collection-view">
+            <div className="collection-header">
+              <div>
+                <h2>Your Content Collection</h2>
+                <p>Manage and track the status of all uploaded titles.</p>
               </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Genre</label>
-                  <input type="text" required value={genre} onChange={e => setGenre(e.target.value)} className="form-input" placeholder="Sci-Fi, Action" />
-                </div>
-                <div className="form-group" style={{maxWidth: '120px'}}>
-                  <label>Year</label>
-                  <input type="text" required value={year} onChange={e => setYear(e.target.value)} className="form-input" />
-                </div>
-              </div>
-              <div className="form-group">
-                <label>Description</label>
-                <textarea rows="4" required value={description} onChange={e => setDescription(e.target.value)} className="form-input" placeholder="Synopsis..." style={{resize: 'none'}}></textarea>
-              </div>
+              <button onClick={() => setView('UPLOAD')} className="new-upload-btn">
+                <Plus size={18}/> New Upload
+              </button>
             </div>
-
-            <div className="cms-card">
-              <h3 style={{color: '#f59e0b'}}><Tag size={20} /> Extended Details</h3>
-              <div className="form-group">
-                <label>Search Tags</label>
-                <input type="text" value={tags} onChange={e => setTags(e.target.value)} className="form-input" placeholder="mind-bending, space, future" />
-              </div>
-              <div className="form-group">
-                <label>Age Rating</label>
-                <select value={ratings} onChange={e => setRatings(e.target.value)} className="form-input">
-                  <option value="U">U (Universal)</option>
-                  <option value="UA">UA (Parental Guidance)</option>
-                  <option value="A">A (Adults Only)</option>
-                  <option value="S">S (Special Audiences)</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Cast & Credits</label>
-                <textarea rows="3" value={credits} onChange={e => setCredits(e.target.value)} className="form-input" placeholder="Director: Christopher Nolan..." style={{resize: 'none'}}></textarea>
-              </div>
-            </div>
-          </div>
-
-          <div className="cms-card media-card">
-            <h3 style={{color: '#3b82f6', marginBottom: '32px'}}><UploadCloud size={24} /> Media Assets</h3>
             
-            <div className="upload-grid">
-              <div className="upload-box">
-                <input type="file" accept="image/*" onChange={e => setThumbnailFile(e.target.files[0])} />
-                <ImageIcon size={32} color="#52525b" style={{marginBottom: 12}} />
-                <p>Upload Poster / Thumbnail</p>
-                <small>16:9 or 2:3 JPG/PNG</small>
-                <button 
-                  type="button" 
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); generateThumbnail(); }}
-                  className="auto-detect-btn"
-                >
-                  <RefreshCw size={14} /> Auto-detect from Video
+            {loadingCollection ? (
+              <div className="collection-loading"><Loader2 className="spinner" size={32}/></div>
+            ) : (
+              <div className="collection-grid">
+                {collection.map(movie => (
+                  <div key={movie.id} className="collection-card">
+                    <div className="thumbnail-wrapper">
+                      <img src={movie.thumbnail || '/thumbnails/default.jpg'} alt={movie.title} />
+                      <div className={`status-badge ${movie.status === 'PENDING' ? 'pending' : 'published'}`}>
+                        {movie.status === 'PENDING' ? 'Pending Review' : 'Published'}
+                      </div>
+                    </div>
+                    <div className="collection-card-info">
+                      <h3>{movie.title}</h3>
+                      <p>
+                        <span className="type-badge">{movie.contentType}</span>
+                        {movie.year} • {movie.genre}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                {collection.length === 0 && (
+                  <div className="empty-collection">
+                    <Film size={48} style={{opacity: 0.3, marginBottom: 16}} />
+                    <h3>No content uploaded yet</h3>
+                    <p>Get started by uploading your first movie or web series.</p>
+                    <button onClick={() => setView('UPLOAD')} className="new-upload-btn" style={{marginTop: 16}}>
+                      <Plus size={16}/> New Upload
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="upload-view">
+            <div className="cms-header flex-header">
+              <div>
+                <h2>Upload New Content</h2>
+                <p>All uploads will be placed in the Moderation Queue for Admin approval before going live.</p>
+              </div>
+              <button onClick={() => setView('COLLECTION')} className="back-btn">
+                <X size={16}/> Cancel
+              </button>
+            </div>
+
+            <form onSubmit={handlePublish}>
+              <div className="content-type-selector">
+                <button type="button" onClick={() => setContentType('MOVIE')} className={`type-btn ${contentType === 'MOVIE' ? 'active' : ''}`}>
+                  <Film size={20} /> Movie
                 </button>
-                {thumbnailFile && <div className="upload-success-overlay"><span><CheckCircle2 size={18}/> Selected: {thumbnailFile.name}</span></div>}
+                <button type="button" onClick={() => setContentType('SERIES')} className={`type-btn ${contentType === 'SERIES' ? 'active' : ''}`}>
+                  <Tv size={20} /> Web Series
+                </button>
               </div>
 
-              <div className="upload-box amber-hover">
-                <input type="file" accept="video/*" onChange={e => setTrailerFile(e.target.files[0])} />
-                <Video size={32} color="#52525b" style={{marginBottom: 12}} />
-                <p>Upload Trailer (Optional)</p>
-                <small>MP4, MKV</small>
-                {trailerFile && <div className="upload-success-overlay success-amber"><span><CheckCircle2 size={18}/> Selected: {trailerFile.name}</span></div>}
-              </div>
-            </div>
-
-            {contentType === 'MOVIE' && (
-              <div className="upload-box red-hover" style={{padding: '40px 24px'}}>
-                <input type="file" accept="video/*" onChange={e => setMovieFile(e.target.files[0])} />
-                <Film size={40} color="#52525b" style={{marginBottom: 16}} />
-                <p style={{fontSize: '18px'}}>Upload Main Movie Video</p>
-                <small>MP4, MKV (Full Feature)</small>
-                {movieFile && <div className="upload-success-overlay success-red"><span><CheckCircle2 size={24}/> Ready: {movieFile.name}</span></div>}
-              </div>
-            )}
-
-            {contentType === 'SERIES' && (
-              <div className="episodes-container">
-                <div className="episodes-header">
-                  <h4>Episodes List</h4>
-                  <button type="button" onClick={addEpisode} className="add-btn"><Plus size={16}/> Add Episode</button>
+              <div className="grid-2">
+                <div className="cms-card">
+                  <h3 style={{color: '#ef4444'}}><FileText size={20} /> Core Metadata</h3>
+                  <div className="form-group">
+                    <label>Title</label>
+                    <input type="text" required value={title} onChange={e => setTitle(e.target.value)} className="form-input" placeholder="e.g. Inception" />
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Genre</label>
+                      <input type="text" required value={genre} onChange={e => setGenre(e.target.value)} className="form-input" placeholder="Sci-Fi, Action" />
+                    </div>
+                    <div className="form-group" style={{maxWidth: '120px'}}>
+                      <label>Year</label>
+                      <input type="text" required value={year} onChange={e => setYear(e.target.value)} className="form-input" />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Description</label>
+                    <textarea rows="4" required value={description} onChange={e => setDescription(e.target.value)} className="form-input" placeholder="Synopsis..." style={{resize: 'none'}}></textarea>
+                  </div>
                 </div>
-                
-                <AnimatePresence>
-                  {episodes.map((ep, index) => (
-                    <motion.div 
-                      key={index}
-                      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -20 }}
-                      className="episode-row"
-                    >
-                      <div className="ep-num">#{ep.episode_num}</div>
-                      <div style={{flex: 1}}>
-                        <input type="text" required value={ep.title} onChange={e => updateEpisode(index, 'title', e.target.value)} className="form-input" placeholder="Episode Title" />
-                      </div>
-                      <div className="ep-file-wrapper">
-                        <input type="file" required accept="video/*" onChange={e => updateEpisode(index, 'file', e.target.files[0])} style={{position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', zIndex: 10}} />
-                        <div className={`ep-file-display ${ep.file ? 'has-file' : ''}`}>
-                          {ep.file ? <><CheckCircle2 size={16}/> {ep.file.name}</> : <><UploadCloud size={16}/> Select Video File</>}
-                        </div>
-                      </div>
-                      <button type="button" onClick={() => removeEpisode(index)} className="remove-btn">
-                        <X size={20}/>
-                      </button>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-                {episodes.length === 0 && <div style={{textAlign: 'center', padding: '32px', color: '#a1a1aa', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '16px'}}>No episodes added yet. Click 'Add Episode' to begin.</div>}
-              </div>
-            )}
-          </div>
 
-          <div className="submit-bar">
-            <div className="submit-info">
-              Ensure all metadata is correct. Large video files may take several minutes to upload depending on your network connection.
-            </div>
-            <button type="submit" disabled={uploading} className="submit-btn">
-              <UploadCloud size={20} /> Submit to Queue
-            </button>
+                <div className="cms-card">
+                  <h3 style={{color: '#f59e0b'}}><Tag size={20} /> Extended Details</h3>
+                  <div className="form-group">
+                    <label>Search Tags</label>
+                    <input type="text" value={tags} onChange={e => setTags(e.target.value)} className="form-input" placeholder="mind-bending, space, future" />
+                  </div>
+                  <div className="form-group">
+                    <label>Age Rating</label>
+                    <select value={ratings} onChange={e => setRatings(e.target.value)} className="form-input">
+                      <option value="U">U (Universal)</option>
+                      <option value="UA">UA (Parental Guidance)</option>
+                      <option value="A">A (Adults Only)</option>
+                      <option value="S">S (Special Audiences)</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Cast & Credits</label>
+                    <textarea rows="3" value={credits} onChange={e => setCredits(e.target.value)} className="form-input" placeholder="Director: Christopher Nolan..." style={{resize: 'none'}}></textarea>
+                  </div>
+                </div>
+              </div>
+
+              <div className="cms-card media-card">
+                <h3 style={{color: '#3b82f6', marginBottom: '32px'}}><UploadCloud size={24} /> Media Assets</h3>
+                
+                <div className="upload-grid">
+                  <div className="upload-box">
+                    <input type="file" accept="image/*" onChange={e => setThumbnailFile(e.target.files[0])} />
+                    <ImageIcon size={32} color="#52525b" style={{marginBottom: 12}} />
+                    <p>Upload Poster / Thumbnail</p>
+                    <small>16:9 or 2:3 JPG/PNG</small>
+                    <button 
+                      type="button" 
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); generateThumbnail(); }}
+                      className="auto-detect-btn"
+                    >
+                      <RefreshCw size={14} /> Auto-detect from Video
+                    </button>
+                    {thumbnailFile && <div className="upload-success-overlay"><span><CheckCircle2 size={18}/> Selected: {thumbnailFile.name}</span></div>}
+                  </div>
+
+                  <div className="upload-box amber-hover">
+                    <input type="file" accept="video/*" onChange={e => setTrailerFile(e.target.files[0])} />
+                    <Video size={32} color="#52525b" style={{marginBottom: 12}} />
+                    <p>Upload Trailer (Optional)</p>
+                    <small>MP4, MKV</small>
+                    {trailerFile && <div className="upload-success-overlay success-amber"><span><CheckCircle2 size={18}/> Selected: {trailerFile.name}</span></div>}
+                  </div>
+                </div>
+
+                {contentType === 'MOVIE' && (
+                  <div className="upload-box red-hover" style={{padding: '40px 24px'}}>
+                    <input type="file" accept="video/*" onChange={e => setMovieFile(e.target.files[0])} />
+                    <Film size={40} color="#52525b" style={{marginBottom: 16}} />
+                    <p style={{fontSize: '18px'}}>Upload Main Movie Video</p>
+                    <small>MP4, MKV (Full Feature)</small>
+                    {movieFile && <div className="upload-success-overlay success-red"><span><CheckCircle2 size={24}/> Ready: {movieFile.name}</span></div>}
+                  </div>
+                )}
+
+                {contentType === 'SERIES' && (
+                  <div className="episodes-container">
+                    <div className="episodes-header">
+                      <h4>Episodes List</h4>
+                      <button type="button" onClick={addEpisode} className="add-btn"><Plus size={16}/> Add Episode</button>
+                    </div>
+                    
+                    <AnimatePresence>
+                      {episodes.map((ep, index) => (
+                        <motion.div 
+                          key={index}
+                          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -20 }}
+                          className="episode-row"
+                        >
+                          <div className="ep-num">#{ep.episode_num}</div>
+                          <div style={{flex: 1}}>
+                            <input type="text" required value={ep.title} onChange={e => updateEpisode(index, 'title', e.target.value)} className="form-input" placeholder="Episode Title" />
+                          </div>
+                          <div className="ep-file-wrapper">
+                            <input type="file" required accept="video/*" onChange={e => updateEpisode(index, 'file', e.target.files[0])} style={{position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', zIndex: 10}} />
+                            <div className={`ep-file-display ${ep.file ? 'has-file' : ''}`}>
+                              {ep.file ? <><CheckCircle2 size={16}/> {ep.file.name}</> : <><UploadCloud size={16}/> Select Video File</>}
+                            </div>
+                          </div>
+                          <button type="button" onClick={() => removeEpisode(index)} className="remove-btn">
+                            <X size={20}/>
+                          </button>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                    {episodes.length === 0 && <div style={{textAlign: 'center', padding: '32px', color: '#a1a1aa', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '16px'}}>No episodes added yet. Click 'Add Episode' to begin.</div>}
+                  </div>
+                )}
+              </div>
+
+              <div className="submit-bar">
+                <div className="submit-info">
+                  Ensure all metadata is correct. Large video files may take several minutes to upload depending on your network connection.
+                </div>
+                <button type="submit" disabled={uploading} className="submit-btn">
+                  <UploadCloud size={20} /> Submit to Queue
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
+        )}
       </main>
 
       <AnimatePresence>
@@ -516,8 +597,34 @@ export default function CMSDashboard() {
         .logout-btn:hover { color: #fff; }
         
         .cms-main { max-width: 1000px; margin: 0 auto; padding: 48px 24px; }
-        .cms-header h2 { font-size: 30px; font-weight: 800; margin: 0 0 8px 0; }
-        .cms-header p { color: #a1a1aa; margin: 0 0 40px 0; font-size: 15px; }
+        
+        .collection-header, .flex-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 32px; }
+        .collection-header h2, .cms-header h2 { font-size: 30px; font-weight: 800; margin: 0 0 8px 0; }
+        .collection-header p, .cms-header p { color: #a1a1aa; margin: 0; font-size: 15px; }
+        
+        .new-upload-btn { background: #fff; color: #000; font-size: 15px; font-weight: 700; padding: 12px 24px; border-radius: 12px; border: none; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 0 20px rgba(255,255,255,0.15); transition: all 0.2s; }
+        .new-upload-btn:hover { background: #e5e5e5; }
+        .back-btn { background: rgba(255,255,255,0.1); color: #fff; padding: 10px 20px; border-radius: 10px; border: none; cursor: pointer; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; transition: background 0.2s; }
+        .back-btn:hover { background: rgba(255,255,255,0.15); }
+        
+        .collection-loading { display: flex; justify-content: center; padding: 60px; }
+        
+        .collection-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px; }
+        .collection-card { background: rgba(20,20,25,0.6); border: 1px solid rgba(255,255,255,0.05); border-radius: 16px; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; }
+        .collection-card:hover { transform: translateY(-4px); box-shadow: 0 10px 30px rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.1); }
+        .thumbnail-wrapper { width: 100%; aspect-ratio: 16/9; position: relative; background: #000; }
+        .thumbnail-wrapper img { width: 100%; height: 100%; object-fit: cover; }
+        .status-badge { position: absolute; top: 12px; right: 12px; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; backdrop-filter: blur(8px); }
+        .status-badge.pending { background: rgba(245, 158, 11, 0.8); color: #fff; border: 1px solid rgba(255,255,255,0.2); }
+        .status-badge.published { background: rgba(34, 197, 94, 0.8); color: #fff; border: 1px solid rgba(255,255,255,0.2); }
+        .collection-card-info { padding: 16px; }
+        .collection-card-info h3 { margin: 0 0 8px 0; font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .collection-card-info p { margin: 0; color: #a1a1aa; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+        .type-badge { background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 10px; color: #fff; font-weight: 600; letter-spacing: 0.5px; }
+        
+        .empty-collection { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px; background: rgba(20,20,25,0.4); border: 1px dashed rgba(255,255,255,0.1); border-radius: 24px; text-align: center; }
+        .empty-collection h3 { margin: 0 0 8px 0; font-size: 20px; font-weight: 700; }
+        .empty-collection p { margin: 0; color: #a1a1aa; font-size: 14px; max-width: 300px; }
         
         .content-type-selector { display: flex; gap: 8px; background: rgba(255,255,255,0.03); padding: 8px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.05); margin-bottom: 32px; }
         .type-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 16px; border-radius: 16px; background: transparent; border: none; color: #a1a1aa; cursor: pointer; transition: all 0.2s; font-size: 16px; font-weight: 600; }
