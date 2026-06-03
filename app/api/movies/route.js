@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { verifyAdminToken, verifyUserToken, verifyCmsToken } from '@/lib/auth';
+import { signAzureUrl } from '@/lib/azure';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,12 +51,22 @@ export async function GET(request) {
 
     const result = await query(sql);
     
-    const movies = result.rows.map(m => ({
-      ...m,
-      videoSrc: isAuthorized ? m.video_src : null, // keep videoSrc camelCase for frontend
-      trailerSrc: m.trailer_src,
-      contentType: m.content_type
-    }));
+    const movies = result.rows.map(m => {
+      let episodes = [];
+      try {
+        episodes = typeof m.episodes === 'string' ? JSON.parse(m.episodes) : (m.episodes || []);
+        episodes = episodes.map(ep => ({ ...ep, video_src: isAuthorized ? signAzureUrl(ep.video_src) : null }));
+      } catch(e) {}
+
+      return {
+        ...m,
+        thumbnail: signAzureUrl(m.thumbnail),
+        videoSrc: isAuthorized ? signAzureUrl(m.video_src) : null, // keep videoSrc camelCase for frontend
+        trailerSrc: signAzureUrl(m.trailer_src),
+        contentType: m.content_type,
+        episodes
+      };
+    });
 
     return NextResponse.json(movies);
   } catch (error) {
