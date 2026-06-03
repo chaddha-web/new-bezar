@@ -11,7 +11,7 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     const { status } = await request.json();
 
     if (!['PENDING', 'PUBLISHED'].includes(status)) {
@@ -34,7 +34,7 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     await query('DELETE FROM movies WHERE id = $1', [id]);
     
     return NextResponse.json({ success: true, message: 'Movie deleted' });

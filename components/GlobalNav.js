@@ -67,7 +67,7 @@ export default function GlobalNav() {
             <span className="sep">|</span>
             <Link href="/signup">Sign Up</Link>
             <span className="sep">|</span>
-            <Link href="/admin/login" style={{ color: '#ef4444' }}>CMS Admin Center</Link>
+            <Link href="/login" style={{ color: '#ef4444' }}>CMS Admin Center</Link>
           </>
         )}
       </div>

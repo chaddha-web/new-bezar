@@ -11,7 +11,7 @@ export async function DELETE(request, { params }) {
     const payload = await verifyAdminToken(session.value);
     if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { id } = params;
+    const { id } = await params;
     if (!id) return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
 
     await query('DELETE FROM cms_users WHERE id = $1', [id]);

@@ -16,7 +16,7 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id: ticketId } = params;
+    const { id: ticketId } = await params;
 
     // Verify ownership
     const ticketRes = await query(
@@ -51,7 +51,7 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id: ticketId } = params;
+    const { id: ticketId } = await params;
     const { message } = await request.json();
 
     if (!message) {
