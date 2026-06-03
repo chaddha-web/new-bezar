@@ -8,6 +8,8 @@ export default function AdminDashboard() {
   const [authenticated, setAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [movies, setMovies] = useState([]);
+  const [pendingMovies, setPendingMovies] = useState([]);
+  const [publishedMovies, setPublishedMovies] = useState([]);
   const [channels, setChannels] = useState([]);
 
   // System settings
@@ -19,6 +21,11 @@ export default function AdminDashboard() {
   // Company Wallets
   const [companyWallets, setCompanyWallets] = useState([]);
   const [newWalletInput, setNewWalletInput] = useState('');
+
+  // CMS Staff
+  const [cmsUsers, setCmsUsers] = useState([]);
+  const [newCmsUsername, setNewCmsUsername] = useState('');
+  const [newCmsPassword, setNewCmsPassword] = useState('');
   
   // Movie Form State
   const [movieTitle, setMovieTitle] = useState('');
@@ -56,16 +63,25 @@ export default function AdminDashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      const [moviesRes, channelsRes, walletsRes] = await Promise.all([
+      const [moviesRes, channelsRes, walletsRes, cmsRes] = await Promise.all([
         fetch('/api/movies'),
         fetch('/api/live-channels'),
-        fetch('/api/admin/wallets')
+        fetch('/api/admin/wallets'),
+        fetch('/api/admin/cms-users')
       ]);
-      if (moviesRes.ok) setMovies(await moviesRes.json());
+      if (moviesRes.ok) {
+        const data = await moviesRes.json();
+        setMovies(data);
+        setPendingMovies(data.filter(m => m.status === 'PENDING'));
+        setPublishedMovies(data.filter(m => m.status === 'PUBLISHED'));
+      }
       if (channelsRes.ok) setChannels(await channelsRes.json());
       if (walletsRes.ok) {
         const { wallets } = await walletsRes.json();
         setCompanyWallets(wallets || []);
+      }
+      if (cmsRes.ok) {
+        setCmsUsers(await cmsRes.json());
       }
 
       const settingsRes = await fetch('/api/settings');
@@ -140,6 +156,39 @@ export default function AdminDashboard() {
     await fetch('/api/admin/auth', { method: 'DELETE' });
     router.push('/admin/login');
   };
+
+  const handleAddCmsUser = async (e) => {
+    e.preventDefault();
+    if (!newCmsUsername || !newCmsPassword) return;
+    try {
+      const res = await fetch('/api/admin/cms-users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: newCmsUsername, password: newCmsPassword })
+      });
+      if (res.ok) {
+        setNewCmsUsername('');
+        setNewCmsPassword('');
+        fetchDashboardData();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to add CMS user');
+      }
+    } catch (error) {
+      alert('Network error');
+    }
+  };
+
+  const handleDeleteCmsUser = async (id) => {
+    if (!confirm('Remove this CMS user access?')) return;
+    try {
+      await fetch(`/api/admin/cms-users/${id}`, { method: 'DELETE' });
+      fetchDashboardData();
+    } catch (error) {
+      alert('Network error');
+    }
+  };
+
 
   // SECURE AZURE DIRECT UPLOAD FUNCTION
   const handleMovieSubmit = async (e) => {
@@ -269,6 +318,61 @@ export default function AdminDashboard() {
         </div>
       </section>
 
+      {/* MODERATION QUEUE */}
+      <section style={{ padding: '0 40px', marginBottom: 30 }}>
+        <div className="dashboard-card border-amber-500/20">
+          <h3 className="text-amber-500">Content Moderation Queue</h3>
+          <p className="card-desc">Review and approve uploads from CMS staff before they go live on the platform.</p>
+          
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Type</th>
+                <th>Uploaded By</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingMovies.map(m => (
+                <tr key={m.id}>
+                  <td className="bold-td">{m.title}</td>
+                  <td>{m.contentType}</td>
+                  <td>CMS Staff</td>
+                  <td className="text-amber-500 font-bold">PENDING REVIEW</td>
+                  <td>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button 
+                        onClick={async () => {
+                          if(!confirm('Publish this content?')) return;
+                          await fetch(`/api/movies/${m.id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ status: 'PUBLISHED' }) });
+                          fetchDashboardData();
+                        }}
+                        style={{ background: '#22c55e', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 'bold' }}
+                      >Approve</button>
+                      <button 
+                        onClick={async () => {
+                          if(!confirm('Reject and delete this content permanently?')) return;
+                          await fetch(`/api/movies/${m.id}`, { method: 'DELETE' });
+                          fetchDashboardData();
+                        }}
+                        style={{ background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', padding: '6px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}
+                      >Reject</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {pendingMovies.length === 0 && (
+                <tr>
+                  <td colSpan="5" className="empty-td">Queue is empty. No pending uploads.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       {/* SYSTEM SETTINGS */}
       <section style={{ padding: '0 40px', marginBottom: 30 }}>
         <div className="dashboard-card">
@@ -386,6 +490,71 @@ export default function AdminDashboard() {
         </div>
       </section>
 
+      {/* CMS STAFF MANAGER */}
+      <section style={{ padding: '0 40px', marginBottom: 30 }}>
+        <div className="dashboard-card">
+          <h3>CMS Staff Management</h3>
+          <p className="card-desc">Create and manage content uploader accounts. They will access the `/cms/login` portal.</p>
+          
+          <form onSubmit={handleAddCmsUser} className="admin-form" style={{ maxWidth: 600, marginBottom: 20 }}>
+            <div className="form-group">
+              <label>Add New Content Manager</label>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <input 
+                  type="text" 
+                  required 
+                  value={newCmsUsername} 
+                  onChange={(e) => setNewCmsUsername(e.target.value)} 
+                  placeholder="Username" 
+                  style={{ flex: 1 }}
+                />
+                <input 
+                  type="password" 
+                  required 
+                  value={newCmsPassword} 
+                  onChange={(e) => setNewCmsPassword(e.target.value)} 
+                  placeholder="Password" 
+                  style={{ flex: 1 }}
+                />
+                <button type="submit" className="submit-btn" style={{ marginTop: 0, padding: '12px 20px' }}>Create User</button>
+              </div>
+            </div>
+          </form>
+
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>Created At</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cmsUsers.map(u => (
+                <tr key={u.id}>
+                  <td className="bold-td">{u.username}</td>
+                  <td>{new Date(u.created_at).toLocaleDateString()}</td>
+                  <td className="status-green">Active</td>
+                  <td>
+                    <button 
+                      onClick={() => handleDeleteCmsUser(u.id)}
+                      style={{ background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', padding: '4px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}
+                    >Revoke Access</button>
+                  </td>
+                </tr>
+              ))}
+              {cmsUsers.length === 0 && (
+                <tr>
+                  <td colSpan="4" className="empty-td">No CMS staff accounts created yet.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+
       {/* DASHBOARD GRID */}
       <div className="dashboard-grid">
         {/* LEFT COLUMN: UPLOAD FORM */}
@@ -459,7 +628,7 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {movies.map((m) => (
+                {publishedMovies.map((m) => (
                   <tr key={m.id}>
                     <td className="bold-td">{m.title}</td>
                     <td>{m.genre}</td>
@@ -467,7 +636,7 @@ export default function AdminDashboard() {
                     <td className="src-url-td" title={m.videoSrc}>{m.videoSrc ? m.videoSrc.substring(0, 30) + '...' : 'None'}</td>
                   </tr>
                 ))}
-                {movies.length === 0 && (
+                {publishedMovies.length === 0 && (
                   <tr>
                     <td colSpan="4" className="empty-td">No movies published yet. Use the form to upload.</td>
                   </tr>

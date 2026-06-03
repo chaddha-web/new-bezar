@@ -14,6 +14,14 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 2.1 Create CMS Staff Users Table
+CREATE TABLE IF NOT EXISTS cms_users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    username VARCHAR(100) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 2.5 Create Auth Tokens Table for Magic Links
 CREATE TABLE IF NOT EXISTS auth_tokens (
     token VARCHAR(64) PRIMARY KEY,
@@ -44,6 +52,14 @@ CREATE TABLE IF NOT EXISTS movies (
     video_src TEXT,
     description TEXT,
     is_featured BOOLEAN DEFAULT FALSE,
+    status VARCHAR(50) DEFAULT 'PENDING', -- 'PENDING', 'PUBLISHED'
+    content_type VARCHAR(50) DEFAULT 'MOVIE', -- 'MOVIE', 'SERIES'
+    trailer_src TEXT,
+    runtime INT DEFAULT 0, -- in seconds
+    episodes JSONB, -- stores array of episode objects
+    tags VARCHAR(255),
+    ratings VARCHAR(50),
+    credits TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -90,31 +106,7 @@ VALUES
 ('india-tv', 'India TV', 'Hindi News', 'https://xstreamcp-assets-msp.streamready.in/assets/LIVETV/LIVECHANNEL/LIVETV_LIVETVCHANNEL_INDIA_TV/images/LOGO_HD/image.png', 'https://pl-indiatvnews.akamaized.net/out/v1/db79179b608641ceaa5a4d0dd0dca8da/index.m3u8', 'India TV — Sach Dikhata Hai. Live round-the-clock.')
 ON CONFLICT (id) DO NOTHING;
 
--- 8. Seed Initial Data for Movies
-INSERT INTO movies (id, title, genre, year, badge, thumbnail, video_src, description, is_featured)
-VALUES
-('a34d3ebb-78a2-4ff1-b151-ba7ad4442301', 'Welcome To The Jungle', 'Action · Comedy', '2026', 'Coming Soon', '/thumbnails/welcome-to-the-jungle.jpg', 'https://d2h58dsjpbzmve.cloudfront.net/50kjr%2Ffile%2F130200cb7ba80242a26d4c6e40d01842_1d5150b877ce5fa4fd0f73b36e1ee5d3.mp4?response-content-disposition=inline%3Bfilename%3D%22130200cb7ba80242a26d4c6e40d01842_1d5150b877ce5fa4fd0f73b36e1ee5d3.mp4%22%3B&response-content-type=video%2Fmp4&Expires=1780020030&Signature=csb6p~dbYbMRofCAh2eLFqamGFQCPuH3KMut46lSb02LMjQsdiUeJtFywFHKkjeqLVahp6pE4hd2aEiZ0xW3XKBMONOHTpMwY7e9pSlM41EjO1hfTbNbSOcir61aV5hllVp6~G0WY5OMFV3020biijRiah7M7zfjH0R11EXd7pwyezoaBVWiumrPmD06OAoANcfzpIBFrq0mz28IGlwYqRIc-t7TZdx1Hhg39sSiTy7-DoDgQyqg3c3tZXSqLX5jS6~zlhD7dqb31pZ2ztka8fzeaSNa2PNh8v01fGADUuBpY1E~y0t~ecCHJRCC~5Cs2EROSu0PGOw4oWomfBim0A__&Key-Pair-Id=APKAJT5WQLLEOADKLHBQ', 'The wildest adventure of the year — arriving June 26, 2026.', TRUE)
-ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO movies (id, title, genre, year, badge, thumbnail, video_src, description, is_featured)
-VALUES
-('b34d3ebb-78a2-4ff1-b151-ba7ad4442302', 'Dangal', 'Drama · Sport', '2016', 'Coming Soon', '/thumbnails/dangal.jpg', 'https://bucket-d4d96s.s3.us-east-1.amazonaws.com/Dangal%20%20Official%20Trailer%20%20Aamir%20Khan%20%20In%20Cinemas%20Dec%2023,%202016%20-%20UTV%20Motion%20Pictures%20(1080p,%20h264).mp4', 'A father''s dream. A daughter''s destiny.', FALSE)
-ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO movies (id, title, genre, year, badge, thumbnail, video_src, description, is_featured)
-VALUES
-('c34d3ebb-78a2-4ff1-b151-ba7ad4442303', 'Disclosure Day', 'Sci-Fi · Thriller', '2025', 'Coming Soon', '/thumbnails/disclosure-day.jpg', 'https://d2n7fc0kw20ri7.cloudfront.net/33hjr%2Ffile%2F12b4b2f204aa7cf9c75bf8ef0b70e893_fbe9a31936719fd602fad278a07cb9f2.mp4?response-content-disposition=inline%3Bfilename%3D%2212b4b2f204aa7cf9c75bf8ef0b70e893_fbe9a31936719fd602fad278a07cb9f2.mp4%22%3B&response-content-type=video%2Fmp4&Expires=1780019951&Signature=TGRNrGF14HN2tDlSg3GX6cLK5hvKbSJPtt29pq8pfICyD3MmH7bdrN0S4djrdqxx0ItpzUs2iWG4R8maqGDriuYxu~oMAVmDpKO5qESGjR5N5XN2udTy2vLPBNxDhY~~1FHwFJ~bhratdErNyixsSPuyiVC-2Itg-2sn7cxQKyni-qpF51h4hm3gy~uxAgOsKwl25vEnib7hKe~N7lUIJguPUv-3dBebTL4NGFotTqNwACLNzdkklFHRsZAz~RqVq-7KD1eY1W86PQO2PkR0ZdiivBj0Vf9geHHjQ9f44SgbU5hIAi3qIRQZoJMQH0pRwfv6sTK2OZXRlAW3cV~KqQ__&Key-Pair-Id=APKAJT5WQLLEOADKLHBQ', 'The truth was never meant to be found.', FALSE)
-ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO movies (id, title, genre, year, badge, thumbnail, video_src, description, is_featured)
-VALUES
-('d34d3ebb-78a2-4ff1-b151-ba7ad4442304', 'Governor', 'Political Thriller', '2025', 'Coming Soon', '/thumbnails/governor.jpg', 'https://bucket-d4d96s.s3.us-east-1.amazonaws.com/GOVERNOR%20%20Official%20Trailer%20%20Manoj%20Bajpayee%20%20Vipul%20Amrutlal%20Shah%20Chinmay%20Mandlekar%20Aashin%20A%20Shah%20-%20Sunshine%20Pictures%20(1080p,%20h264).mp4', 'Power has a price. Every seat costs a soul.', FALSE)
-ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO movies (id, title, genre, year, badge, thumbnail, video_src, description, is_featured)
-VALUES
-('e34d3ebb-78a2-4ff1-b151-ba7ad4442305', 'Gully Boy', 'Drama · Music', '2019', 'Coming Soon', '/thumbnails/gully-boy.jpg', 'https://bucket-d4d96s.s3.us-east-1.amazonaws.com/Gully%20Boy%20%20Official%20Trailer%20%20Ranveer%20Singh%20%20Alia%20Bhatt%20%20Zoya%20Akhtar%2014th%20February%20-%20Excel%20Movies%20(1080p,%20h264).mp4', 'From the streets to the stage.', FALSE)
-ON CONFLICT (id) DO NOTHING;
+-- 8. Removed placeholder movies seeding to allow CMS to manage all content.
 
 -- 9. Create MLM Nodes Table (Web3 BEP-20 Ledger Optimized)
 CREATE TABLE IF NOT EXISTS mlm_nodes (

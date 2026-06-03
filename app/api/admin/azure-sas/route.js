@@ -5,16 +5,22 @@ import {
   BlobSASPermissions, 
   StorageSharedKeyCredential 
 } from '@azure/storage-blob';
-import { verifyAdminToken } from '@/lib/auth';
+import { verifyAdminToken, verifyCmsToken } from '@/lib/auth';
 
 export async function POST(request) {
   try {
-    const session = request.cookies.get('bezar_admin_session');
-    if (!session || !session.value) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    let isAuthorized = false;
+    const adminSession = request.cookies.get('bezar_admin_session');
+    if (adminSession && adminSession.value && await verifyAdminToken(adminSession.value)) {
+      isAuthorized = true;
+    } else {
+      const cmsSession = request.cookies.get('bezar_cms_session');
+      if (cmsSession && cmsSession.value && await verifyCmsToken(cmsSession.value)) {
+        isAuthorized = true;
+      }
     }
-    const payload = await verifyAdminToken(session.value);
-    if (!payload) {
+
+    if (!isAuthorized) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
