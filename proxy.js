@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyUserToken, verifyAdminToken } from '@/lib/auth';
 
-export async function middleware(request) {
+export async function proxy(request) {
   const { pathname } = request.nextUrl;
 
   // 1. Admin Paths Protection
