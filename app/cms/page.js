@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Film, Tv, UploadCloud, Plus, X, Video, Image as ImageIcon, 
-  Tag, Star, Users, FileText, CheckCircle2, Loader2, PlayCircle, LogOut 
+  Tag, Star, Users, FileText, CheckCircle2, Loader2, PlayCircle, LogOut, RefreshCw 
 } from 'lucide-react';
 
 export default function CMSDashboard() {
@@ -70,6 +70,60 @@ export default function CMSDashboard() {
       };
       video.src = url;
     });
+  };
+
+  const generateThumbnail = async () => {
+    // Determine which video to use
+    let sourceFile = null;
+    if (contentType === 'MOVIE' && movieFile) {
+      sourceFile = movieFile;
+    } else if (contentType === 'SERIES' && episodes.length > 0 && episodes[0].file) {
+      sourceFile = episodes[0].file;
+    } else if (trailerFile) {
+      sourceFile = trailerFile;
+    }
+
+    if (!sourceFile) {
+      alert("Please upload a movie, episode, or trailer video first before auto-detecting a thumbnail.");
+      return;
+    }
+
+    setUploadStatus("Extracting thumbnail...");
+    setUploading(true);
+    setUploadProgress(0);
+
+    try {
+      const url = URL.createObjectURL(sourceFile);
+      const video = document.createElement('video');
+      video.muted = true;
+      video.src = url;
+
+      await new Promise((resolve, reject) => {
+        video.onloadeddata = () => {
+          // Seek to 5 seconds or 10% of the video
+          video.currentTime = Math.min(5, video.duration * 0.1);
+        };
+        video.onseeked = () => resolve();
+        video.onerror = (e) => reject("Error loading video for thumbnail extraction");
+      });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+      const file = new File([blob], `auto_thumbnail_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      
+      setThumbnailFile(file);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(e);
+    } finally {
+      setUploading(false);
+      setUploadStatus("");
+    }
   };
 
   // Helper to upload a file directly to Azure
@@ -318,10 +372,17 @@ export default function CMSDashboard() {
             
             <div className="upload-grid">
               <div className="upload-box">
-                <input type="file" required accept="image/*" onChange={e => setThumbnailFile(e.target.files[0])} />
+                <input type="file" accept="image/*" onChange={e => setThumbnailFile(e.target.files[0])} />
                 <ImageIcon size={32} color="#52525b" style={{marginBottom: 12}} />
                 <p>Upload Poster / Thumbnail</p>
                 <small>16:9 or 2:3 JPG/PNG</small>
+                <button 
+                  type="button" 
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); generateThumbnail(); }}
+                  className="auto-detect-btn"
+                >
+                  <RefreshCw size={14} /> Auto-detect from Video
+                </button>
                 {thumbnailFile && <div className="upload-success-overlay"><span><CheckCircle2 size={18}/> Selected: {thumbnailFile.name}</span></div>}
               </div>
 
@@ -484,8 +545,11 @@ export default function CMSDashboard() {
         .upload-box:hover { border-color: #3b82f6; }
         .upload-box input[type="file"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10; }
         .upload-box p { margin: 8px 0 0 0; font-weight: 600; font-size: 14px; }
-        .upload-box small { color: #a1a1aa; font-size: 12px; margin-top: 4px; }
+        .upload-box small { color: #a1a1aa; font-size: 12px; margin-top: 4px; margin-bottom: 12px; }
         
+        .auto-detect-btn { position: relative; z-index: 20; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background 0.2s; }
+        .auto-detect-btn:hover { background: rgba(255,255,255,0.2); }
+
         .upload-success-overlay { position: absolute; inset: 0; background: rgba(37, 99, 235, 0.2); backdrop-filter: blur(4px); border: 2px solid #3b82f6; border-radius: 16px; display: flex; align-items: center; justify-content: center; z-index: 5; }
         .upload-success-overlay span { font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; font-size: 14px; }
         
