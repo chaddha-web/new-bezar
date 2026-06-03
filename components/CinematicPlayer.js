@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 export default function CinematicPlayer({ movie, onClose, initialTime = 0, userId }) {
+  const activeSrc = movie.isTrailer ? movie.trailerSrc : movie.videoSrc;
+
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   const containerRef = useRef(null);
@@ -21,7 +23,7 @@ export default function CinematicPlayer({ movie, onClose, initialTime = 0, userI
   useEffect(() => {
     if (videoRef.current) {
       const video = videoRef.current;
-      const isM3U8 = movie.videoSrc.endsWith('.m3u8') || movie.videoSrc.includes('m3u8');
+      const isM3U8 = activeSrc && (activeSrc.endsWith('.m3u8') || activeSrc.includes('m3u8'));
 
       if (isM3U8) {
         import('hls.js').then((HlsModule) => {
@@ -31,7 +33,7 @@ export default function CinematicPlayer({ movie, onClose, initialTime = 0, userI
               enableWorker: true,
               lowLatencyMode: true,
             });
-            hls.loadSource(movie.videoSrc);
+            hls.loadSource(activeSrc);
             hls.attachMedia(video);
             hlsRef.current = hls;
 
@@ -44,7 +46,7 @@ export default function CinematicPlayer({ movie, onClose, initialTime = 0, userI
               setVideoError(true);
             });
           } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            video.src = movie.videoSrc;
+            video.src = activeSrc;
             video.addEventListener('loadedmetadata', () => {
               if (initialTime > 0) video.currentTime = initialTime;
               video.play().then(() => setPlaying(true)).catch(() => {});
@@ -55,7 +57,7 @@ export default function CinematicPlayer({ movie, onClose, initialTime = 0, userI
         });
       } else {
         // Standard MP4 handling
-        video.src = movie.videoSrc;
+        video.src = activeSrc;
         video.addEventListener('loadedmetadata', () => {
           if (initialTime > 0) video.currentTime = initialTime;
           video.play().then(() => setPlaying(true)).catch(() => {});
@@ -186,7 +188,7 @@ export default function CinematicPlayer({ movie, onClose, initialTime = 0, userI
       </div>
 
       <div className="video-viewport" onClick={togglePlay}>
-        {!movie.videoSrc ? (
+        {!activeSrc ? (
           <div className="premium-lock">
             <h2>Premium Content Locked</h2>
             <p>You must have an active subscription or be an active affiliate to watch this movie.</p>

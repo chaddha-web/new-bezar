@@ -211,8 +211,8 @@ function HomeContent() {
   }, [moviesList]);
 
   /* ── Video overlay controls ── */
-  const openVideo = useCallback((movie) => {
-    setVideoOverlay(movie);
+  const openVideo = useCallback((movie, isTrailer = false) => {
+    setVideoOverlay({ ...movie, isTrailer });
     setVideoError(false);
   }, []);
 
@@ -326,7 +326,7 @@ function HomeContent() {
             <div className="hero-actions">
               <button
                 className="btn-primary"
-                onClick={() => openVideo(featured)}
+                onClick={() => openVideo(featured, true)}
                 id="hero-play-btn"
               >
                 <IconPlay /> Watch Trailer

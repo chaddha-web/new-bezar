@@ -178,7 +178,9 @@ export default function CMSDashboard() {
         video.onloadeddata = () => {
           video.currentTime = Math.min(5, video.duration * 0.1);
         };
-        video.onseeked = () => resolve();
+        video.onseeked = () => {
+          setTimeout(resolve, 300);
+        };
         video.onerror = () => reject("Error loading video");
       });
 
