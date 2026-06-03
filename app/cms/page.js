@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Film, Tv, UploadCloud, Plus, X, Video, Image as ImageIcon, 
-  Tag, Star, Users, FileText, CheckCircle2, Loader2, PlayCircle, LogOut, RefreshCw 
+  Tag, FileText, CheckCircle2, Loader2, PlayCircle, LogOut, RefreshCw 
 } from 'lucide-react';
 
 export default function CMSDashboard() {
@@ -28,20 +28,13 @@ export default function CMSDashboard() {
   const [ratings, setRatings] = useState('UA');
   const [credits, setCredits] = useState('');
 
-  // Files State
-  const [thumbnailFile, setThumbnailFile] = useState(null);
-  const [trailerFile, setTrailerFile] = useState(null);
-  const [movieFile, setMovieFile] = useState(null); // only for MOVIE
-  
-  // Series Episodes
-  const [episodes, setEpisodes] = useState([]); // { title, file, runtime, episode_num }
+  // Assets tracking { file, url, progress, status: IDLE|UPLOADING|SUCCESS|ERROR, runtime }
+  const [thumbnailAsset, setThumbnailAsset] = useState({ file: null, url: null, progress: 0, status: 'IDLE' });
+  const [trailerAsset, setTrailerAsset] = useState({ file: null, url: null, progress: 0, status: 'IDLE' });
+  const [movieAsset, setMovieAsset] = useState({ file: null, url: null, progress: 0, status: 'IDLE', runtime: 0 });
+  const [episodes, setEpisodes] = useState([]); // { title, episode_num, file, url, progress, status, runtime }
 
-  // Upload State
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadStatus, setUploadStatus] = useState('');
-  const [totalFiles, setTotalFiles] = useState(0);
-  const [uploadedFilesCount, setUploadedFilesCount] = useState(0);
+  const [savingMetadata, setSavingMetadata] = useState(false);
 
   useEffect(() => {
     fetch('/api/cms/auth')
@@ -75,7 +68,6 @@ export default function CMSDashboard() {
     router.push('/login');
   };
 
-  // Helper to detect video runtime
   const detectRuntime = (file) => {
     return new Promise((resolve) => {
       if (!file) return resolve(0);
@@ -88,30 +80,93 @@ export default function CMSDashboard() {
       };
       video.onerror = () => {
         URL.revokeObjectURL(url);
-        resolve(0); // fallback
+        resolve(0);
       };
       video.src = url;
     });
   };
 
+  const handleImmediateUpload = async (file, type, index = null) => {
+    if (!file) return;
+
+    const updateState = (update) => {
+      if (type === 'THUMBNAIL') setThumbnailAsset(prev => ({ ...prev, ...update }));
+      else if (type === 'TRAILER') setTrailerAsset(prev => ({ ...prev, ...update }));
+      else if (type === 'MOVIE') setMovieAsset(prev => ({ ...prev, ...update }));
+      else if (type === 'EPISODE' && index !== null) {
+        setEpisodes(prev => {
+          const newEps = [...prev];
+          newEps[index] = { ...newEps[index], ...update };
+          return newEps;
+        });
+      }
+    };
+
+    updateState({ file, progress: 0, status: 'UPLOADING', url: null });
+
+    try {
+      let runtime = 0;
+      if (type !== 'THUMBNAIL') {
+        runtime = await detectRuntime(file);
+        if (type === 'MOVIE') updateState({ runtime });
+        else if (type === 'EPISODE') updateState({ runtime });
+      }
+
+      const sasRes = await fetch('/api/admin/azure-sas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, filetype: file.type })
+      });
+      if (!sasRes.ok) throw new Error('Failed to get SAS');
+      const { uploadUrl, blobUrl, mock } = await sasRes.json();
+
+      if (mock) {
+        await new Promise(r => setTimeout(r, 1000));
+        updateState({ progress: 100, status: 'SUCCESS', url: blobUrl });
+        return;
+      }
+
+      await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", uploadUrl, true);
+        xhr.setRequestHeader("x-ms-blob-type", "BlockBlob");
+        xhr.setRequestHeader("Content-Type", file.type);
+        
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            updateState({ progress: Math.round((event.loaded / event.total) * 100) });
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status === 201 || xhr.status === 200) resolve();
+          else reject(new Error(`Failed: ${xhr.status}`));
+        };
+        xhr.onerror = () => reject(new Error("Network error"));
+        xhr.send(file);
+      });
+
+      updateState({ progress: 100, status: 'SUCCESS', url: blobUrl });
+
+    } catch (e) {
+      console.error(e);
+      updateState({ status: 'ERROR' });
+      alert(`Upload failed for ${file.name}`);
+    }
+  };
+
   const generateThumbnail = async () => {
     let sourceFile = null;
-    if (contentType === 'MOVIE' && movieFile) {
-      sourceFile = movieFile;
-    } else if (contentType === 'SERIES' && episodes.length > 0 && episodes[0].file) {
-      sourceFile = episodes[0].file;
-    } else if (trailerFile) {
-      sourceFile = trailerFile;
-    }
+    if (contentType === 'MOVIE' && movieAsset.file) sourceFile = movieAsset.file;
+    else if (contentType === 'SERIES' && episodes.length > 0 && episodes[0].file) sourceFile = episodes[0].file;
+    else if (trailerAsset.file) sourceFile = trailerAsset.file;
 
     if (!sourceFile) {
-      alert("Please upload a movie, episode, or trailer video first before auto-detecting a thumbnail.");
+      alert("Please select a movie, episode, or trailer video first to detect a thumbnail from.");
       return;
     }
 
-    setUploadStatus("Extracting thumbnail...");
-    setUploading(true);
-    setUploadProgress(0);
+    setThumbnailAsset(prev => ({ ...prev, status: 'UPLOADING', progress: 0 }));
 
     try {
       const url = URL.createObjectURL(sourceFile);
@@ -124,7 +179,7 @@ export default function CMSDashboard() {
           video.currentTime = Math.min(5, video.duration * 0.1);
         };
         video.onseeked = () => resolve();
-        video.onerror = (e) => reject("Error loading video for thumbnail extraction");
+        video.onerror = () => reject("Error loading video");
       });
 
       const canvas = document.createElement('canvas');
@@ -135,119 +190,58 @@ export default function CMSDashboard() {
 
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
       const file = new File([blob], `auto_thumbnail_${Date.now()}.jpg`, { type: 'image/jpeg' });
-      
-      setThumbnailFile(file);
       URL.revokeObjectURL(url);
+      
+      handleImmediateUpload(file, 'THUMBNAIL');
     } catch (e) {
       alert(e);
-    } finally {
-      setUploading(false);
-      setUploadStatus("");
+      setThumbnailAsset(prev => ({ ...prev, status: 'ERROR' }));
     }
   };
 
-  // Helper to upload a file directly to Azure
-  const uploadToAzure = async (file, purpose) => {
-    if (!file) return null;
-    setUploadStatus(`Uploading ${purpose}...`);
-    
-    // 1. Get SAS Token
-    const sasRes = await fetch('/api/admin/azure-sas', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename: file.name, filetype: file.type })
-    });
-    if (!sasRes.ok) throw new Error(`Failed to get SAS token for ${file.name}`);
-    
-    const { uploadUrl, blobUrl, mock } = await sasRes.json();
+  const addEpisode = () => {
+    setEpisodes([
+      ...episodes, 
+      { title: '', episode_num: episodes.length + 1, file: null, url: null, progress: 0, status: 'IDLE', runtime: 0 }
+    ]);
+  };
 
-    if (mock) {
-      await new Promise(r => setTimeout(r, 1000));
-      setUploadedFilesCount(prev => prev + 1);
-      return blobUrl;
-    }
+  const updateEpisodeTitle = (index, value) => {
+    const newEps = [...episodes];
+    newEps[index].title = value;
+    setEpisodes(newEps);
+  };
 
-    // 2. Upload file directly
-    await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("PUT", uploadUrl, true);
-      xhr.setRequestHeader("x-ms-blob-type", "BlockBlob");
-      xhr.setRequestHeader("Content-Type", file.type);
-      
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
-          setUploadProgress(Math.round((event.loaded / event.total) * 100));
-        }
-      };
-
-      xhr.onload = () => {
-        if (xhr.status === 201 || xhr.status === 200) resolve();
-        else reject(new Error(`Azure upload failed: ${xhr.status}`));
-      };
-      xhr.onerror = () => reject(new Error("Network error during Azure upload"));
-      xhr.send(file);
-    });
-
-    setUploadProgress(0);
-    setUploadedFilesCount(prev => prev + 1);
-    return blobUrl;
+  const removeEpisode = (index) => {
+    const newEps = episodes.filter((_, i) => i !== index);
+    setEpisodes(newEps.map((ep, i) => ({ ...ep, episode_num: i + 1 })));
   };
 
   const handlePublish = async (e) => {
     e.preventDefault();
-    if (!thumbnailFile) return alert("Thumbnail is required.");
-    if (contentType === 'MOVIE' && !movieFile) return alert("Main Movie Video is required.");
-    if (contentType === 'SERIES' && episodes.length === 0) return alert("At least one episode is required for a series.");
+    
+    if (thumbnailAsset.status !== 'SUCCESS') return alert("Thumbnail must be fully uploaded.");
+    if (!trailerAsset.file || trailerAsset.status !== 'SUCCESS') return alert("Trailer is required and must be fully uploaded.");
+    
+    if (contentType === 'MOVIE') {
+      if (movieAsset.file && movieAsset.status !== 'SUCCESS') return alert("Main Movie is still uploading.");
+    } else {
+      for (const ep of episodes) {
+        if (ep.status !== 'SUCCESS') return alert(`Episode ${ep.episode_num} must be fully uploaded.`);
+        if (!ep.title) return alert(`Episode ${ep.episode_num} needs a title.`);
+      }
+    }
+
+    setSavingMetadata(true);
 
     try {
-      setUploading(true);
-      setUploadProgress(0);
-      setUploadedFilesCount(0);
-      
-      let fileCount = 1; // thumbnail
-      if (trailerFile) fileCount++;
-      if (contentType === 'MOVIE' && movieFile) fileCount++;
-      if (contentType === 'SERIES') fileCount += episodes.length;
-      setTotalFiles(fileCount);
-      
-      // 1. Detect runtimes
-      setUploadStatus("Analyzing video lengths...");
-      const movieRuntime = contentType === 'MOVIE' ? await detectRuntime(movieFile) : 0;
-      
-      const processedEpisodes = [];
-      if (contentType === 'SERIES') {
-        for (let i = 0; i < episodes.length; i++) {
-          const ep = episodes[i];
-          const runtime = await detectRuntime(ep.file);
-          processedEpisodes.push({ ...ep, runtime });
-        }
-      }
+      const finalEpisodesData = contentType === 'SERIES' ? episodes.map(ep => ({
+        episode_num: ep.episode_num,
+        title: ep.title,
+        runtime: ep.runtime,
+        video_src: ep.url
+      })) : [];
 
-      // 2. Upload files
-      const thumbnailUrl = await uploadToAzure(thumbnailFile, "Thumbnail");
-      const trailerUrl = trailerFile ? await uploadToAzure(trailerFile, "Trailer") : null;
-      let movieUrl = null;
-      
-      if (contentType === 'MOVIE') {
-        movieUrl = await uploadToAzure(movieFile, "Main Movie");
-      }
-
-      const finalEpisodesData = [];
-      if (contentType === 'SERIES') {
-        for (let i = 0; i < processedEpisodes.length; i++) {
-          const ep = processedEpisodes[i];
-          const epUrl = await uploadToAzure(ep.file, `Episode ${ep.episode_num}`);
-          finalEpisodesData.push({
-            episode_num: ep.episode_num,
-            title: ep.title,
-            runtime: ep.runtime,
-            video_src: epUrl
-          });
-        }
-      }
-
-      // 3. Save to Database
-      setUploadStatus("Saving metadata (Pending Review)...");
       const saveRes = await fetch('/api/movies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -256,11 +250,11 @@ export default function CMSDashboard() {
           genre,
           year,
           description,
-          thumbnail: thumbnailUrl,
-          videoSrc: movieUrl,
-          trailerSrc: trailerUrl,
+          thumbnail: thumbnailAsset.url,
+          videoSrc: contentType === 'MOVIE' ? movieAsset.url : null,
+          trailerSrc: trailerAsset.url || null,
           contentType,
-          runtime: movieRuntime,
+          runtime: contentType === 'MOVIE' ? movieAsset.runtime : 0,
           episodes: finalEpisodesData,
           tags,
           ratings,
@@ -271,41 +265,59 @@ export default function CMSDashboard() {
 
       if (!saveRes.ok) throw new Error("Failed to save to database");
 
-      alert("Content uploaded successfully! It is now PENDING review by the Admin.");
-      // Go back to collection and refresh
+      alert("Content published successfully! Pending Admin Review.");
+      
       setView('COLLECTION');
       fetchCollection();
 
-      // Reset form
+      // Reset
       setTitle(''); setGenre(''); setYear(new Date().getFullYear().toString()); setDescription(''); setTags(''); setCredits('');
-      setThumbnailFile(null); setTrailerFile(null); setMovieFile(null); setEpisodes([]);
+      setThumbnailAsset({ file: null, url: null, progress: 0, status: 'IDLE' });
+      setTrailerAsset({ file: null, url: null, progress: 0, status: 'IDLE' });
+      setMovieAsset({ file: null, url: null, progress: 0, status: 'IDLE', runtime: 0 });
+      setEpisodes([]);
 
     } catch (err) {
       console.error(err);
       alert("Error: " + err.message);
     } finally {
-      setUploading(false);
-      setUploadStatus('');
-      setUploadProgress(0);
+      setSavingMetadata(false);
     }
   };
 
-  const addEpisode = () => {
-    setEpisodes([
-      ...episodes, 
-      { title: '', file: null, episode_num: episodes.length + 1 }
-    ]);
-  };
+  const renderUploadBox = (title, accept, asset, type, index = null, icon, colorClass) => {
+    return (
+      <div className={`upload-box ${colorClass}`}>
+        <input 
+          type="file" 
+          accept={accept} 
+          onChange={e => handleImmediateUpload(e.target.files[0], type, index)} 
+        />
+        {icon}
+        <p>{title}</p>
+        
+        {type === 'THUMBNAIL' && (
+          <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); generateThumbnail(); }} className="auto-detect-btn">
+            <RefreshCw size={14} /> Auto-detect from Video
+          </button>
+        )}
 
-  const updateEpisode = (index, field, value) => {
-    const newEps = [...episodes];
-    newEps[index][field] = value;
-    setEpisodes(newEps);
-  };
-
-  const removeEpisode = (index) => {
-    const newEps = episodes.filter((_, i) => i !== index);
-    setEpisodes(newEps.map((ep, i) => ({ ...ep, episode_num: i + 1 })));
+        {asset.status === 'UPLOADING' && (
+          <div className="inline-progress-overlay">
+            <div className="inline-progress-text">Uploading... {asset.progress}%</div>
+            <div className="inline-progress-track">
+              <div className="inline-progress-fill" style={{ width: \`\${asset.progress}%\` }}></div>
+            </div>
+          </div>
+        )}
+        
+        {asset.status === 'SUCCESS' && (
+          <div className="upload-success-overlay">
+            <span><CheckCircle2 size={18}/> Ready: {asset.file?.name}</span>
+          </div>
+        )}
+      </div>
+    );
   };
 
   if (loadingAuth) return <div className="cms-loading"><Loader2 size={32} className="spinner" /></div>;
@@ -384,7 +396,7 @@ export default function CMSDashboard() {
             <div className="cms-header flex-header">
               <div>
                 <h2>Upload New Content</h2>
-                <p>All uploads will be placed in the Moderation Queue for Admin approval before going live.</p>
+                <p>Videos will start uploading immediately upon selection.</p>
               </div>
               <button onClick={() => setView('COLLECTION')} className="back-btn">
                 <X size={16}/> Cancel
@@ -450,37 +462,13 @@ export default function CMSDashboard() {
                 <h3 style={{color: '#3b82f6', marginBottom: '32px'}}><UploadCloud size={24} /> Media Assets</h3>
                 
                 <div className="upload-grid">
-                  <div className="upload-box">
-                    <input type="file" accept="image/*" onChange={e => setThumbnailFile(e.target.files[0])} />
-                    <ImageIcon size={32} color="#52525b" style={{marginBottom: 12}} />
-                    <p>Upload Poster / Thumbnail</p>
-                    <small>16:9 or 2:3 JPG/PNG</small>
-                    <button 
-                      type="button" 
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); generateThumbnail(); }}
-                      className="auto-detect-btn"
-                    >
-                      <RefreshCw size={14} /> Auto-detect from Video
-                    </button>
-                    {thumbnailFile && <div className="upload-success-overlay"><span><CheckCircle2 size={18}/> Selected: {thumbnailFile.name}</span></div>}
-                  </div>
-
-                  <div className="upload-box amber-hover">
-                    <input type="file" accept="video/*" onChange={e => setTrailerFile(e.target.files[0])} />
-                    <Video size={32} color="#52525b" style={{marginBottom: 12}} />
-                    <p>Upload Trailer (Optional)</p>
-                    <small>MP4, MKV</small>
-                    {trailerFile && <div className="upload-success-overlay success-amber"><span><CheckCircle2 size={18}/> Selected: {trailerFile.name}</span></div>}
-                  </div>
+                  {renderUploadBox("Upload Poster / Thumbnail", "image/*", thumbnailAsset, 'THUMBNAIL', null, <ImageIcon size={32} color="#52525b" style={{marginBottom: 12}} />, '')}
+                  {renderUploadBox("Upload Trailer", "video/*", trailerAsset, 'TRAILER', null, <Video size={32} color="#52525b" style={{marginBottom: 12}} />, 'amber-hover')}
                 </div>
 
                 {contentType === 'MOVIE' && (
-                  <div className="upload-box red-hover" style={{padding: '40px 24px'}}>
-                    <input type="file" accept="video/*" onChange={e => setMovieFile(e.target.files[0])} />
-                    <Film size={40} color="#52525b" style={{marginBottom: 16}} />
-                    <p style={{fontSize: '18px'}}>Upload Main Movie Video</p>
-                    <small>MP4, MKV (Full Feature)</small>
-                    {movieFile && <div className="upload-success-overlay success-red"><span><CheckCircle2 size={24}/> Ready: {movieFile.name}</span></div>}
+                  <div style={{marginTop: '24px'}}>
+                    {renderUploadBox("Upload Main Movie Video (Optional)", "video/*", movieAsset, 'MOVIE', null, <Film size={40} color="#52525b" style={{marginBottom: 16}} />, 'red-hover massive')}
                   </div>
                 )}
 
@@ -493,21 +481,32 @@ export default function CMSDashboard() {
                     
                     <AnimatePresence>
                       {episodes.map((ep, index) => (
-                        <motion.div 
-                          key={index}
-                          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -20 }}
-                          className="episode-row"
-                        >
+                        <motion.div key={index} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -20 }} className="episode-row">
                           <div className="ep-num">#{ep.episode_num}</div>
                           <div style={{flex: 1}}>
-                            <input type="text" required value={ep.title} onChange={e => updateEpisode(index, 'title', e.target.value)} className="form-input" placeholder="Episode Title" />
+                            <input type="text" required value={ep.title} onChange={e => updateEpisodeTitle(index, e.target.value)} className="form-input" placeholder="Episode Title" />
                           </div>
-                          <div className="ep-file-wrapper">
-                            <input type="file" required accept="video/*" onChange={e => updateEpisode(index, 'file', e.target.files[0])} style={{position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', zIndex: 10}} />
-                            <div className={`ep-file-display ${ep.file ? 'has-file' : ''}`}>
-                              {ep.file ? <><CheckCircle2 size={16}/> {ep.file.name}</> : <><UploadCloud size={16}/> Select Video File</>}
+                          
+                          <div className="ep-file-wrapper" style={{position: 'relative', overflow: 'hidden'}}>
+                            <input 
+                              type="file" 
+                              required 
+                              accept="video/*" 
+                              onChange={e => handleImmediateUpload(e.target.files[0], 'EPISODE', index)} 
+                              style={{position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', zIndex: 10}} 
+                            />
+                            
+                            <div className={`ep-file-display ${ep.status === 'SUCCESS' ? 'has-file' : ''}`}>
+                              {ep.status === 'IDLE' && <><UploadCloud size={16}/> Select Video File</>}
+                              {ep.status === 'UPLOADING' && <span style={{color: '#3b82f6'}}>Uploading... {ep.progress}%</span>}
+                              {ep.status === 'SUCCESS' && <><CheckCircle2 size={16}/> Ready: {ep.file?.name}</>}
                             </div>
+                            
+                            {ep.status === 'UPLOADING' && (
+                              <div style={{position: 'absolute', bottom: 0, left: 0, height: '3px', background: '#3b82f6', width: \`\${ep.progress}%\`, transition: 'width 0.2s'}}></div>
+                            )}
                           </div>
+
                           <button type="button" onClick={() => removeEpisode(index)} className="remove-btn">
                             <X size={20}/>
                           </button>
@@ -521,41 +520,17 @@ export default function CMSDashboard() {
 
               <div className="submit-bar">
                 <div className="submit-info">
-                  Ensure all metadata is correct. Large video files may take several minutes to upload depending on your network connection.
+                  Assets begin uploading immediately when selected. Wait for all uploads to complete before submitting.
                 </div>
-                <button type="submit" disabled={uploading} className="submit-btn">
-                  <UploadCloud size={20} /> Submit to Queue
+                <button type="submit" disabled={savingMetadata} className="submit-btn">
+                  {savingMetadata ? <Loader2 size={20} className="spinner" /> : <UploadCloud size={20} />} 
+                  {savingMetadata ? 'Publishing...' : 'Publish Content'}
                 </button>
               </div>
             </form>
           </div>
         )}
       </main>
-
-      <AnimatePresence>
-        {uploading && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="loader-overlay">
-            <div className="loader-card">
-              <Loader2 size={64} className="spinner" />
-              <h2>Uploading Content</h2>
-              <p>Please do not close this window or refresh the page. Large video files may take a while.</p>
-              
-              <div className="progress-text">
-                <span className="status">{uploadStatus}</span>
-                <span className="pct">{uploadProgress}%</span>
-              </div>
-              
-              <div className="progress-track">
-                <div className="progress-fill" style={{ width: `${uploadProgress}%` }} />
-              </div>
-
-              <div className="file-count">
-                File {Math.min(uploadedFilesCount + 1, totalFiles)} of {totalFiles}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <style jsx global>{`
         body { margin: 0; background: #000; }
@@ -646,26 +621,30 @@ export default function CMSDashboard() {
         .form-input:focus { border-color: #ef4444; }
         select.form-input { appearance: none; }
         
-        .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+        .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
         @media(max-width: 768px) { .upload-grid { grid-template-columns: 1fr; } }
+        
         .upload-box { border: 1px dashed rgba(255,255,255,0.2); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.3); position: relative; cursor: pointer; transition: border-color 0.2s; overflow: hidden; text-align: center; }
+        .upload-box.massive { padding: 40px 24px; }
         .upload-box:hover { border-color: #3b82f6; }
         .upload-box input[type="file"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10; }
         .upload-box p { margin: 8px 0 0 0; font-weight: 600; font-size: 14px; }
-        .upload-box small { color: #a1a1aa; font-size: 12px; margin-top: 4px; margin-bottom: 12px; }
         
-        .auto-detect-btn { position: relative; z-index: 20; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background 0.2s; }
+        .auto-detect-btn { position: relative; z-index: 20; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background 0.2s; margin-top: 12px; }
         .auto-detect-btn:hover { background: rgba(255,255,255,0.2); }
 
+        .inline-progress-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 5; padding: 24px; }
+        .inline-progress-text { color: #fff; font-size: 14px; font-weight: 700; margin-bottom: 8px; }
+        .inline-progress-track { width: 100%; max-width: 200px; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; }
+        .inline-progress-fill { height: 100%; background: #3b82f6; transition: width 0.2s ease; }
+        
         .upload-success-overlay { position: absolute; inset: 0; background: rgba(37, 99, 235, 0.2); backdrop-filter: blur(4px); border: 2px solid #3b82f6; border-radius: 16px; display: flex; align-items: center; justify-content: center; z-index: 5; }
         .upload-success-overlay span { font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; font-size: 14px; }
         
         .upload-box.red-hover:hover { border-color: #ef4444; }
         .upload-box.amber-hover:hover { border-color: #f59e0b; }
-        .success-red { background: rgba(239, 68, 68, 0.2); border-color: #ef4444; }
-        .success-amber { background: rgba(245, 158, 11, 0.2); border-color: #f59e0b; }
         
-        .episodes-container { margin-top: 16px; }
+        .episodes-container { margin-top: 24px; }
         .episodes-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px; margin-bottom: 16px; }
         .episodes-header h4 { margin: 0; font-size: 18px; font-weight: 700; }
         .add-btn { background: rgba(255,255,255,0.1); color: #fff; border: none; padding: 8px 16px; border-radius: 12px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s; }
@@ -686,18 +665,8 @@ export default function CMSDashboard() {
         .submit-btn:hover:not(:disabled) { background: #e5e5e5; }
         .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
         
-        .loader-overlay { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.9); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; padding: 32px; }
-        .loader-card { background: #141419; border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 40px; width: 100%; max-width: 600px; display: flex; flex-direction: column; align-items: center; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
-        .spinner { animation: spin 1s linear infinite; margin-bottom: 24px; color: #ef4444; }
+        .spinner { animation: spin 1s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .loader-card h2 { font-size: 28px; font-weight: 800; margin: 0 0 8px 0; }
-        .loader-card p { color: #a1a1aa; margin: 0 0 32px 0; font-size: 15px; max-width: 400px; }
-        .progress-text { width: 100%; display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
-        .progress-text .status { color: #a1a1aa; }
-        .progress-text .pct { color: #ef4444; }
-        .progress-track { width: 100%; height: 16px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; overflow: hidden; margin-bottom: 24px; position: relative; }
-        .progress-fill { position: absolute; top: 0; left: 0; height: 100%; background: linear-gradient(90deg, #ef4444, #f59e0b); transition: width 0.3s ease-out; }
-        .file-count { color: #a1a1aa; font-size: 14px; font-weight: 500; }
       `}</style>
     </div>
   );
