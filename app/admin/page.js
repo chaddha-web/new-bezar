@@ -51,11 +51,11 @@ export default function AdminDashboard() {
         setAuthenticated(true);
         fetchDashboardData();
       } else {
-        router.push('/admin/login');
+        router.push('/login');
       }
     } catch (err) {
       console.error(err);
-      router.push('/admin/login');
+      router.push('/login');
     } finally {
       setLoading(false);
     }
@@ -154,7 +154,7 @@ export default function AdminDashboard() {
 
   const handleLogout = async () => {
     await fetch('/api/admin/auth', { method: 'DELETE' });
-    router.push('/admin/login');
+    router.push('/login');
   };
 
   const handleAddCmsUser = async (e) => {

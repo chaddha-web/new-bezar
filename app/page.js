@@ -12,60 +12,7 @@ import CinematicPlayer from "@/components/CinematicPlayer";
    ──────────────────────────────────────────── */
 const VIDEO_BUCKET = "https://bucket-d4d96s.s3.us-east-1.amazonaws.com";
 
-const MOVIES = [
-  {
-    id: "welcome-to-the-jungle",
-    title: "Welcome To The Jungle",
-    genre: "Action · Comedy",
-    year: "2026",
-    badge: "Coming Soon",
-    thumbnail: "/thumbnails/welcome-to-the-jungle.jpg",
-    videoSrc: "https://d2h58dsjpbzmve.cloudfront.net/50kjr%2Ffile%2F130200cb7ba80242a26d4c6e40d01842_1d5150b877ce5fa4fd0f73b36e1ee5d3.mp4?response-content-disposition=inline%3Bfilename%3D%22130200cb7ba80242a26d4c6e40d01842_1d5150b877ce5fa4fd0f73b36e1ee5d3.mp4%22%3B&response-content-type=video%2Fmp4&Expires=1780020030&Signature=csb6p~dbYbMRofCAh2eLFqamGFQCPuH3KMut46lSb02LMjQsdiUeJtFywFHKkjeqLVahp6pE4hd2aEiZ0xW3XKBMONOHTpMwY7e9pSlM41EjO1hfTbNbSOcir61aV5hllVp6~G0WY5OMFV3020biijRiah7M7zfjH0R11EXd7pwyezoaBVWiumrPmD06OAoANcfzpIBFrq0mz28IGlwYqRIc-t7TZdx1Hhg39sSiTy7-DoDgQyqg3c3tZXSqLX5jS6~zlhD7dqb31pZ2ztka8fzeaSNa2PNh8v01fGADUuBpY1E~y0t~ecCHJRCC~5Cs2EROSu0PGOw4oWomfBim0A__&Key-Pair-Id=APKAJT5WQLLEOADKLHBQ",
-    featured: true,
-    description:
-      "The wildest adventure of the year — arriving June 26, 2026.",
-  },
-  {
-    id: "dangal",
-    title: "Dangal",
-    genre: "Drama · Sport",
-    year: "2016",
-    badge: "Coming Soon",
-    thumbnail: "/thumbnails/dangal.jpg",
-    videoSrc: `${VIDEO_BUCKET}/Dangal%20%20Official%20Trailer%20%20Aamir%20Khan%20%20In%20Cinemas%20Dec%2023,%202016%20-%20UTV%20Motion%20Pictures%20(1080p,%20h264).mp4`,
-    description: "A father's dream. A daughter's destiny.",
-  },
-  {
-    id: "disclosure-day",
-    title: "Disclosure Day",
-    genre: "Sci-Fi · Thriller",
-    year: "2025",
-    badge: "Coming Soon",
-    thumbnail: "/thumbnails/disclosure-day.jpg",
-    videoSrc: "https://d2n7fc0kw20ri7.cloudfront.net/33hjr%2Ffile%2F12b4b2f204aa7cf9c75bf8ef0b70e893_fbe9a31936719fd602fad278a07cb9f2.mp4?response-content-disposition=inline%3Bfilename%3D%2212b4b2f204aa7cf9c75bf8ef0b70e893_fbe9a31936719fd602fad278a07cb9f2.mp4%22%3B&response-content-type=video%2Fmp4&Expires=1780019951&Signature=TGRNrGF14HN2tDlSg3GX6cLK5hvKbSJPtt29pq8pfICyD3MmH7bdrN0S4djrdqxx0ItpzUs2iWG4R8maqGDriuYxu~oMAVmDpKO5qESGjR5N5XN2udTy2vLPBNxDhY~~1FHwFJ~bhratdErNyixsSPuyiVC-2Itg-2sn7cxQKyni-qpF51h4hm3gy~uxAgOsKwl25vEnib7hKe~N7lUIJguPUv-3dBebTL4NGFotTqNwACLNzdkklFHRsZAz~RqVq-7KD1eY1W86PQO2PkR0ZdiivBj0Vf9geHHjQ9f44SgbU5hIAi3qIRQZoJMQH0pRwfv6sTK2OZXRlAW3cV~KqQ__&Key-Pair-Id=APKAJT5WQLLEOADKLHBQ",
-    description: "The truth was never meant to be found.",
-  },
-  {
-    id: "governor",
-    title: "Governor",
-    genre: "Political Thriller",
-    year: "2025",
-    badge: "Coming Soon",
-    thumbnail: "/thumbnails/governor.jpg",
-    videoSrc: `${VIDEO_BUCKET}/GOVERNOR%20%20Official%20Trailer%20%20Manoj%20Bajpayee%20%20Vipul%20Amrutlal%20Shah%20Chinmay%20Mandlekar%20Aashin%20A%20Shah%20-%20Sunshine%20Pictures%20(1080p,%20h264).mp4`,
-    description: "Power has a price. Every seat costs a soul.",
-  },
-  {
-    id: "gully-boy",
-    title: "Gully Boy",
-    genre: "Drama · Music",
-    year: "2019",
-    badge: "Coming Soon",
-    thumbnail: "/thumbnails/gully-boy.jpg",
-    videoSrc: `${VIDEO_BUCKET}/Gully%20Boy%20%20Official%20Trailer%20%20Ranveer%20Singh%20%20Alia%20Bhatt%20%20Zoya%20Akhtar%2014th%20February%20-%20Excel%20Movies%20(1080p,%20h264).mp4`,
-    description: "From the streets to the stage.",
-  },
-];
+const MOVIES = [];
 
 const LIVE_CHANNELS = [
   {
@@ -204,7 +151,9 @@ function HomeContent() {
   useEffect(() => {
     if (videoOverlay || notifyModal) return;
     const interval = setInterval(() => {
-      setHeroIndex((prev) => (prev + 1) % moviesList.length);
+      if (moviesList.length > 0) {
+        setHeroIndex((prev) => (prev + 1) % moviesList.length);
+      }
     }, 5000);
     return () => clearInterval(interval);
   }, [videoOverlay, notifyModal, moviesList]);
@@ -358,68 +307,76 @@ function HomeContent() {
   return (
     <>
       {/* ═══════ HERO CAMPAIGN TILE ═══════ */}
-      <section className="hero" id="hero">
-        <img
-          key={`hero-img-${heroIndex}`}
-          className="hero-media"
-          src={featured.thumbnail}
-          alt={featured.title}
-        />
-        <div className="hero-overlay" />
-        <div key={`hero-content-${heroIndex}`} className="hero-content">
-          <div className="hero-badge">
-            <span className="dot" />
-            {featured.badge}
+      {featured && (
+        <section className="hero" id="hero">
+          <img
+            key={`hero-img-${heroIndex}`}
+            className="hero-media"
+            src={featured.thumbnail}
+            alt={featured.title}
+          />
+          <div className="hero-overlay" />
+          <div key={`hero-content-${heroIndex}`} className="hero-content">
+            <div className="hero-badge">
+              <span className="dot" />
+              {featured.badge}
+            </div>
+            <h1 className="hero-title">{featured.title}</h1>
+            <p className="hero-subtitle">{featured.description}</p>
+            <div className="hero-actions">
+              <button
+                className="btn-primary"
+                onClick={() => openVideo(featured)}
+                id="hero-play-btn"
+              >
+                <IconPlay /> Watch Trailer
+              </button>
+              <button
+                className="btn-icon"
+                onClick={() => setNotifyModal(featured)}
+                aria-label="Get notified"
+                id="hero-notify-btn"
+              >
+                <IconBell />
+              </button>
+            </div>
           </div>
-          <h1 className="hero-title">{featured.title}</h1>
-          <p className="hero-subtitle">{featured.description}</p>
-          <div className="hero-actions">
-            <button
-              className="btn-primary"
-              onClick={() => openVideo(featured)}
-              id="hero-play-btn"
-            >
-              <IconPlay /> Watch Trailer
-            </button>
-            <button
-              className="btn-icon"
-              onClick={() => setNotifyModal(featured)}
-              aria-label="Get notified"
-              id="hero-notify-btn"
-            >
-              <IconBell />
-            </button>
-          </div>
-        </div>
 
-        {/* Navigation Arrows */}
-        <button
-          className="hero-arrow hero-arrow-left"
-          onClick={() => setHeroIndex((prev) => (prev - 1 + MOVIES.length) % MOVIES.length)}
-          aria-label="Previous slide"
-        >
-          <IconChevronLeft />
-        </button>
-        <button
-          className="hero-arrow hero-arrow-right"
-          onClick={() => setHeroIndex((prev) => (prev + 1) % MOVIES.length)}
-          aria-label="Next slide"
-        >
-          <IconChevronRight />
-        </button>
+          {/* Navigation Arrows */}
+          {moviesList.length > 1 && (
+            <>
+              <button
+                className="hero-arrow hero-arrow-left"
+                onClick={() => setHeroIndex((prev) => (prev - 1 + moviesList.length) % moviesList.length)}
+                aria-label="Previous slide"
+              >
+                <IconChevronLeft />
+              </button>
+              <button
+                className="hero-arrow hero-arrow-right"
+                onClick={() => setHeroIndex((prev) => (prev + 1) % moviesList.length)}
+                aria-label="Next slide"
+              >
+                <IconChevronRight />
+              </button>
+            </>
+          )}
 
-        {/* Indicator Dots */}
-        <div className="hero-indicators">
-          {MOVIES.map((_, idx) => (
-            <button
-              key={idx}
-              className={`hero-dot ${idx === heroIndex ? "active" : ""}`}
-              onClick={() => setHeroIndex(idx)}
-              aria-label={`Slide ${idx + 1}`}
-            />
-          ))}
-        </div>
-      </section>
+          {/* Indicator Dots */}
+          {moviesList.length > 1 && (
+            <div className="hero-indicators">
+              {moviesList.map((_, idx) => (
+                <button
+                  key={idx}
+                  className={`hero-dot ${idx === heroIndex ? "active" : ""}`}
+                  onClick={() => setHeroIndex(idx)}
+                  aria-label={`Slide ${idx + 1}`}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* ═══════ RESUME WATCHING GRID ═══════ */}
       {resumeWatching.length > 0 && (
