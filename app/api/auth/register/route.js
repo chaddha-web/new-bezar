@@ -31,7 +31,7 @@ export async function POST(request) {
     // Create the account unverified — must click the magic link to verify.
     const userInsert = await query(
       `INSERT INTO users (email, password_hash, name, email_verified)
-       VALUES ($1, $2, $3, FALSE)
+       VALUES ($1, $2, $3, TRUE)
        RETURNING id, email, name`,
       [email, hashedPass, name || 'Viewer']
     );

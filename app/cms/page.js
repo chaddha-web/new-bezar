@@ -37,7 +37,7 @@ export default function CMSDashboard() {
   const [savingMetadata, setSavingMetadata] = useState(false);
 
   useEffect(() => {
-    fetch('/api/cms/auth')
+    fetch('/api/cms/auth', { cache: 'no-store' })
       .then(res => res.json())
       .then(data => {
         if (data.authenticated) {
