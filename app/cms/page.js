@@ -35,6 +35,8 @@ export default function CMSDashboard() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('');
+  const [totalFiles, setTotalFiles] = useState(0);
+  const [uploadedFilesCount, setUploadedFilesCount] = useState(0);
 
   // Hidden video player for runtime detection
   const videoRef = useRef(null);
@@ -115,6 +117,7 @@ export default function CMSDashboard() {
     });
 
     setUploadProgress(0);
+    setUploadedFilesCount(prev => prev + 1);
     return blobUrl;
   };
 
@@ -127,6 +130,13 @@ export default function CMSDashboard() {
     try {
       setUploading(true);
       setUploadProgress(0);
+      setUploadedFilesCount(0);
+      
+      let fileCount = 1; // thumbnail
+      if (trailerFile) fileCount++;
+      if (contentType === 'MOVIE' && movieFile) fileCount++;
+      if (contentType === 'SERIES') fileCount += episodes.length;
+      setTotalFiles(fileCount);
       
       // 1. Detect runtimes
       setUploadStatus("Analyzing video lengths...");
@@ -422,19 +432,7 @@ export default function CMSDashboard() {
           {/* SUBMIT BUTTON */}
           <div className="sticky bottom-6 z-40 bg-neutral-900/90 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl flex items-center justify-between">
             <div className="flex-1 mr-8">
-              {uploading ? (
-                <div className="w-full">
-                  <div className="flex justify-between text-xs font-bold text-neutral-400 mb-2 uppercase tracking-wider">
-                    <span>{uploadStatus}</span>
-                    <span className="text-white">{uploadProgress}%</span>
-                  </div>
-                  <div className="h-2 w-full bg-neutral-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-red-500 to-amber-500 transition-all duration-300 ease-out" style={{ width: `${uploadProgress}%` }} />
-                  </div>
-                </div>
-              ) : (
                 <p className="text-sm text-neutral-400">Ensure all metadata is correct. Large video files may take several minutes to upload depending on your network connection.</p>
-              )}
             </div>
             
             <button 
@@ -442,12 +440,47 @@ export default function CMSDashboard() {
               disabled={uploading}
               className="bg-white hover:bg-neutral-200 text-black font-bold py-3 px-8 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-[0_0_20px_rgba(255,255,255,0.2)] transition-all"
             >
-              {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <UploadCloud className="w-5 h-5" />}
-              {uploading ? 'Processing...' : 'Submit to Queue'}
+              <UploadCloud className="w-5 h-5" />
+              Submit to Queue
             </button>
           </div>
         </form>
       </main>
+
+      {/* FULLSCREEN UPLOAD LOADER */}
+      <AnimatePresence>
+        {uploading && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-8"
+          >
+            <div className="max-w-2xl w-full bg-neutral-900 border border-white/10 p-10 rounded-3xl shadow-2xl flex flex-col items-center text-center">
+              <Loader2 className="w-16 h-16 text-red-500 animate-spin mb-6" />
+              
+              <h2 className="text-3xl font-bold mb-2">Uploading Content</h2>
+              <p className="text-neutral-400 mb-8 max-w-md">Please do not close this window or refresh the page. Large video files may take a while.</p>
+              
+              <div className="w-full mb-2 flex justify-between text-sm font-bold uppercase tracking-wider">
+                <span className="text-neutral-400">{uploadStatus}</span>
+                <span className="text-red-500">{uploadProgress}%</span>
+              </div>
+              
+              <div className="w-full h-4 bg-neutral-950 rounded-full overflow-hidden mb-6 border border-white/5 relative">
+                <div 
+                  className="absolute top-0 left-0 h-full bg-gradient-to-r from-red-600 to-amber-500 transition-all duration-300 ease-out"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+
+              <div className="text-sm text-neutral-500 font-medium">
+                File {Math.min(uploadedFilesCount + 1, totalFiles)} of {totalFiles}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
