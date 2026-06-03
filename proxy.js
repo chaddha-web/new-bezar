@@ -5,13 +5,24 @@ export async function proxy(request) {
   const { pathname } = request.nextUrl;
 
   // 1. Admin Paths Protection
-  if (pathname.startsWith('/admin') && !pathname.startsWith('/admin/login')) {
+  if (pathname.startsWith('/admin')) {
     const token = request.cookies.get('bezar_admin_session')?.value;
     const payload = token ? await verifyAdminToken(token) : null;
     
     if (!payload) {
       const url = request.nextUrl.clone();
-      url.pathname = '/admin/login';
+      url.pathname = '/login';
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // 1b. CMS Paths Protection
+  if (pathname.startsWith('/cms')) {
+    const token = request.cookies.get('bezar_cms_session')?.value;
+    
+    if (!token) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/login';
       return NextResponse.redirect(url);
     }
   }
@@ -65,6 +76,7 @@ export async function proxy(request) {
 export const config = {
   matcher: [
     '/admin/:path*',
+    '/cms/:path*',
     '/api/admin/:path*',
     '/api/movies',
     '/api/wallet/:path*',

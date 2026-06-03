@@ -7,7 +7,7 @@ import Link from 'next/link';
 
 
 export default function UserLogin() {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -21,16 +21,18 @@ export default function UserLogin() {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('/api/auth/unified-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ identifier, password }),
       });
 
       const data = await res.json();
       if (res.ok && data.success) {
         setSuccess('Signed in. Redirecting…');
-        router.push('/');
+        if (data.role === 'admin') router.push('/admin');
+        else if (data.role === 'cms') router.push('/cms');
+        else router.push('/');
       } else {
         setError(data.error || 'Authentication failed');
       }
@@ -55,14 +57,14 @@ export default function UserLogin() {
           {success && <div className="success-banner">{success}</div>}
 
           <div className="input-group">
-            <label htmlFor="email">Email Address</label>
+            <label htmlFor="identifier">Email Address or Username</label>
             <input
-              type="email"
-              id="email"
+              type="text"
+              id="identifier"
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@domain.com"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="Email or Username"
             />
           </div>
 
