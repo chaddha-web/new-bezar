@@ -38,7 +38,7 @@ const LIVE_CHANNELS = [
     title: "ABP News",
     genre: "Hindi News",
     badge: "LIVE",
-    logo: "https://jiotvimages.cdn.jio.com/dare_images/images/ABP_News.png",
+    logo: "https://upload.wikimedia.org/wikipedia/commons/c/cd/ABP_News_logo.svg",
     videoSrc: "https://d2l4ar6y3mrs4k.cloudfront.net/live-streaming/abpnews-livetv/master.m3u8",
     description: "Breaking news, politics, and analysis live from ABP.",
   },
