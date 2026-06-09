@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { verifyUserToken, verifyAdminToken } from '@/lib/auth';
+import { verifyUserToken, verifyAdminToken, verifyCmsToken } from '@/lib/auth';
 
 export async function proxy(request) {
   const { pathname } = request.nextUrl;
@@ -32,20 +32,26 @@ export async function proxy(request) {
     pathname.startsWith('/api/admin') && 
     !pathname.startsWith('/api/admin/auth')
   ) {
-    const token = request.cookies.get('bezar_admin_session')?.value;
-    const payload = token ? await verifyAdminToken(token) : null;
+    const adminToken = request.cookies.get('bezar_admin_session')?.value;
+    const adminPayload = adminToken ? await verifyAdminToken(adminToken) : null;
     
-    if (!payload) {
+    const cmsToken = request.cookies.get('bezar_cms_session')?.value;
+    const cmsPayload = cmsToken ? await verifyCmsToken(cmsToken) : null;
+    
+    if (!adminPayload && !cmsPayload) {
       return NextResponse.json({ error: 'Unauthorized admin access' }, { status: 401 });
     }
   }
 
   // Admin POST restriction for movies
   if (pathname === '/api/movies' && request.method === 'POST') {
-    const token = request.cookies.get('bezar_admin_session')?.value;
-    const payload = token ? await verifyAdminToken(token) : null;
+    const adminToken = request.cookies.get('bezar_admin_session')?.value;
+    const adminPayload = adminToken ? await verifyAdminToken(adminToken) : null;
     
-    if (!payload) {
+    const cmsToken = request.cookies.get('bezar_cms_session')?.value;
+    const cmsPayload = cmsToken ? await verifyCmsToken(cmsToken) : null;
+    
+    if (!adminPayload && !cmsPayload) {
       return NextResponse.json({ error: 'Unauthorized to post movies' }, { status: 401 });
     }
   }
